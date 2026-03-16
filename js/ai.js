@@ -87,59 +87,118 @@ async function generateResponse(prompt) {
       // Try the newer Gemini 2.0 Flash model first, then fallback to 1.5 Flash
       let geminiResponse;
       let modelUsed = '';
+      let retries = 0;
+      const maxRetries = 3;
+      const baseDelay = 2000; // 2 seconds
       
-      try {
-        // Try Gemini 2.0 Flash first
-        geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 150,
-              topP: 0.8,
-              topK: 40
+      while (retries < maxRetries) {
+        try {
+          // Try Gemini 2.0 Flash first
+          geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
+                }]
+              }],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 150,
+                topP: 0.8,
+                topK: 40
+              }
+            })
+          });
+          modelUsed = 'gemini-2.0-flash';
+          
+          // If rate limited, wait and retry
+          if (geminiResponse.status === 429) {
+            const delay = baseDelay * Math.pow(2, retries);
+            console.warn(`Gemini rate limited (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries++;
+            continue;
+          }
+          
+          break; // Success or non-retryable error
+          
+        } catch (fetchError) {
+          if (retries < maxRetries - 1) {
+            const delay = baseDelay * Math.pow(2, retries);
+            console.warn(`Gemini fetch failed (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries++;
+          } else {
+            // Final attempt failed, try fallback model
+            console.warn('Gemini 2.0 Flash failed after all retries, trying 1.5 Flash:', fetchError);
+            break;
+          }
+        }
+      }
+      
+      // If still rate limited or failed, try fallback model
+      if (!geminiResponse || geminiResponse.status === 429) {
+        retries = 0;
+        while (retries < maxRetries) {
+          try {
+            geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [{
+                    text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
+                  }]
+                }],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 150,
+                  topP: 0.8,
+                  topK: 40
+                }
+              })
+            });
+            modelUsed = 'gemini-1.5-flash';
+            
+            if (geminiResponse.status === 429) {
+              const delay = baseDelay * Math.pow(2, retries);
+              console.warn(`Gemini 1.5 rate limited (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              retries++;
+              continue;
             }
-          })
-        });
-        modelUsed = 'gemini-2.0-flash';
-      } catch (error) {
-        console.warn('Gemini 2.0 Flash failed, trying 1.5 Flash:', error);
-        // Fallback to Gemini 1.5 Flash
-        geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 150,
-              topP: 0.8,
-              topK: 40
+            
+            break;
+            
+          } catch (fetchError) {
+            if (retries < maxRetries - 1) {
+              const delay = baseDelay * Math.pow(2, retries);
+              console.warn(`Gemini 1.5 fetch failed (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              retries++;
+            } else {
+              throw fetchError;
             }
-          })
-        });
-        modelUsed = 'gemini-1.5-flash';
+          }
+        }
       }
 
-      if (!geminiResponse.ok) {
-        if (geminiResponse.status === 404) {
+      if (!geminiResponse || !geminiResponse.ok) {
+        if (geminiResponse && geminiResponse.status === 429) {
+          throw new Error('Both AI services are rate limited. Please wait a minute and try again.');
+        }
+        if (geminiResponse && geminiResponse.status === 404) {
           throw new Error(`Gemini model '${modelUsed}' not found or API key invalid. Please check your API key and model availability.`);
         }
-        throw new Error(`Gemini API error: ${geminiResponse.status} ${geminiResponse.statusText}`);
+        const status = geminiResponse ? geminiResponse.status : 'unknown';
+        const statusText = geminiResponse ? geminiResponse.statusText : 'no response';
+        throw new Error(`Gemini API error: ${status} ${statusText}`);
       }
 
       const geminiData = await geminiResponse.json();
@@ -442,10 +501,6 @@ function isTimeManagementQuery(query) {
     'effective', 'efficient', 'productive', 'successful', 'better'
   ];
 
-  const queryWords = query.toLowerCase().split(/\s+/);
-  return queryWords.some(word => timeManagementKeywords.includes(word)) ||
-         timeManagementKeywords.some(keyword => query.toLowerCase().includes(keyword));
-}
 
 async function getAIResponse(userInput) {
   try {
@@ -458,31 +513,63 @@ async function getAIResponse(userInput) {
       throw new Error('Gemini API key not configured');
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `You are a time management coach. Provide concise, actionable advice about time management, productivity, and task organization. Focus on practical tips that can be implemented immediately. Keep responses brief and to the point. User's question: ${userInput}`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 1,
-          topP: 1,
-          maxOutputTokens: 150
-        }
-      })
-    });
+    let response;
+    let retries = 0;
+    const maxRetries = 3;
+    const baseDelay = 2000;
     
-    if (!response.ok) {
-      if (response.status === 404) {
+    while (retries < maxRetries) {
+      try {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `You are a time management coach. Provide concise, actionable advice about time management, productivity, and task organization. Focus on practical tips that can be implemented immediately. Keep responses brief and to the point. User's question: ${userInput}`
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 1,
+              topP: 1,
+              maxOutputTokens: 150
+            }
+          })
+        });
+        
+        if (response.status === 429) {
+          const delay = baseDelay * Math.pow(2, retries);
+          console.warn(`Gemini rate limited in getAIResponse (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retries++;
+          continue;
+        }
+        
+        break; // Success or non-retryable error
+        
+      } catch (fetchError) {
+        if (retries < maxRetries - 1) {
+          const delay = baseDelay * Math.pow(2, retries);
+          console.warn(`Gemini fetch failed in getAIResponse (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          retries++;
+        } else {
+          throw fetchError;
+        }
+      }
+    }
+    
+    if (!response || !response.ok) {
+      if (response && response.status === 429) {
+        throw new Error('Gemini API rate limit exceeded. Please wait a minute and try again.');
+      }
+      if (response && response.status === 404) {
         throw new Error('Gemini model not found or API key invalid');
       }
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP error! status: ${response ? response.status : 'unknown'}`);
     }
     
     const data = await response.json();
@@ -499,10 +586,6 @@ async function getAIResponse(userInput) {
 }
 
 async function handleUserInput(userInput) {
-  if (!userInput.trim()) return;
-
-  addMessageToChat('user', userInput);
-  
   if (!isTimeManagementQuery(userInput)) {
     addMessageToChat('assistant', `
       <div class="flex items-center space-x-2">
@@ -628,5 +711,5 @@ async function generateAIResponse(message) {
         return 'I understand you want help with time management. Here are some tips...';
     } catch (error) {
         return 'I\'m sorry, I couldn\'t process your request. Please try again.';
-  }
+    }
 }
