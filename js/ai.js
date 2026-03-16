@@ -501,6 +501,10 @@ function isTimeManagementQuery(query) {
     'effective', 'efficient', 'productive', 'successful', 'better'
   ];
 
+  const queryWords = query.toLowerCase().split(/\s+/);
+  return queryWords.some(word => timeManagementKeywords.includes(word)) ||
+         timeManagementKeywords.some(keyword => query.toLowerCase().includes(keyword));
+}
 
 async function getAIResponse(userInput) {
   try {
@@ -712,5 +716,4 @@ async function generateAIResponse(message) {
     } catch (error) {
         return 'I\'m sorry, I couldn\'t process your request. Please try again.';
     }
-}
 }
