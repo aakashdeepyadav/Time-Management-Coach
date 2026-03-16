@@ -4,24 +4,61 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TM Coach</title>
-  <link rel="icon" type="image/x-icon" href="https://cdn2.iconfinder.com/data/icons/artificial-intelligence-6/64/ArtificialIntelligence9-512.png">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       content: ['./*.html', './js/*.js'],
       theme: {
-        extend: {}
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+              950: '#082f49',
+            },
+            surface: {
+              50: '#f8fafc',
+              100: '#f1f5f9',
+              200: '#e2e8f0',
+              300: '#cbd5e1',
+              400: '#94a3b8',
+              500: '#64748b',
+              600: '#475569',
+              700: '#334155',
+              800: '#1e293b',
+              900: '#0f172a',
+              950: '#020617',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          }
+        }
       },
       plugins: []
     }
   </script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
     [x-cloak] { display: none !important; }
-    .transition-colors {
-      transition-property: background-color, border-color, color, fill, stroke;
-      transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-      transition-duration: 150ms;
+    
+    body {
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+
+    .transition-all-custom {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
   </style>
   <link rel="stylesheet" href="css/styles.css">
@@ -39,93 +76,159 @@
     </svg>
   </button>
 
-  <div id="login-screen" class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-    <div class="card p-8 max-w-md w-full">
-      <h1 class="text-3xl font-bold text-center mb-6 text-blue-600 dark:text-blue-400">TM Coach</h1>
-      <p class="text-center mb-8 text-gray-600 dark:text-gray-300">Your personal time management coach</p>
-      <div class="space-y-4">
-        <button id="google-signin-btn" class="btn btn-primary w-full flex items-center justify-center">
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" class="w-5 h-5 mr-2">
-          Sign in with Google
-        </button>
-        <button id="skip-login-btn" class="btn btn-secondary w-full">Continue without Login</button>
+  <div id="login-screen" class="min-h-screen flex items-center justify-center bg-surface-50 dark:bg-surface-950 p-4">
+    <div class="card p-10 max-w-md w-full relative overflow-hidden">
+      <!-- Decorative element -->
+      <div class="absolute -top-12 -right-12 w-32 h-32 bg-brand-500/10 rounded-full blur-3xl"></div>
+      
+      <div class="relative z-10">
+        <div class="flex justify-center mb-6">
+          <div class="w-16 h-16 bg-brand-500 rounded-2xl flex items-center justify-center shadow-lg shadow-brand-500/20">
+            <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </div>
+        <h1 class="text-3xl font-bold text-center mb-2 tracking-tight text-surface-900 dark:text-surface-50">TM Coach</h1>
+        <p class="text-center mb-8 text-surface-500 dark:text-surface-400 font-medium">Elevate your daily productivity</p>
+        
+        <div class="space-y-3">
+          <button id="google-signin-btn" class="btn btn-primary w-full text-base py-3">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" class="w-5 h-5 mr-1">
+            Sign in with Google
+          </button>
+          <button id="skip-login-btn" class="btn btn-secondary w-full text-base py-3">Continue without Login</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <div id="main-app" class="hidden min-h-screen bg-gray-100 dark:bg-gray-800 flex flex-col">
-    <nav class="bg-white dark:bg-gray-900 shadow-md">
+  <div id="main-app" class="hidden min-h-screen bg-surface-50 dark:bg-surface-950 flex flex-col">
+    <nav class="bg-white/80 dark:bg-surface-900/80 backdrop-blur-md sticky top-0 z-50 border-b border-surface-100 dark:border-surface-800">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
-          <div class="flex items-center">
-            <span class="text-xl font-bold text-blue-600 dark:text-blue-400">TM Coach</span>
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center shadow-sm">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <span class="text-xl font-bold tracking-tight text-surface-900 dark:text-surface-50">TM Coach</span>
           </div>
-          <div class="flex items-center space-x-4">
-            <span id="user-name" class="text-gray-700 dark:text-gray-300"></span>
-            <img id="user-avatar" class="w-8 h-8 rounded-full" src="" alt="User avatar">
-            <button id="logout-btn" class="btn btn-secondary">Logout</button>
+          <div class="flex items-center space-x-6">
+            <div class="hidden sm:flex items-center space-x-3">
+              <span id="user-name" class="text-sm font-semibold text-surface-700 dark:text-surface-300"></span>
+              <img id="user-avatar" class="w-8 h-8 rounded-full border-2 border-surface-100 dark:border-surface-800" src="" alt="User avatar">
+            </div>
+            <button id="logout-btn" class="btn btn-secondary py-1.5 px-4 text-sm">Logout</button>
           </div>
         </div>
       </div>
     </nav>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div class="lg:col-span-1 space-y-8">
-          <div class="card p-6">
-            <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Pomodoro Timer</h2>
-            <div class="text-center">
-              <div id="timer-display" class="text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">25:00</div>
-              <div class="flex justify-center space-x-4">
-                <button id="start-timer" class="btn btn-primary">Start</button>
-                <button id="pause-timer" class="btn btn-secondary">Pause</button>
-                <button id="reset-timer" class="btn btn-secondary">Reset</button>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-grow">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <!-- Sidebar -->
+        <div class="lg:col-span-4 space-y-10">
+          <!-- Pomodoro -->
+          <section class="card p-8">
+            <div class="flex items-center space-x-3 mb-6">
+              <div class="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg text-orange-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
-              <div class="mt-6">
-                <select id="timer-mode" class="form-input w-full">
-                  <option value="pomodoro">Pomodoro (25 min)</option>
+              <h2 class="text-lg font-bold text-surface-900 dark:text-surface-50">Pomodoro Timer</h2>
+            </div>
+            
+            <div class="text-center">
+              <div id="timer-display" class="text-6xl font-bold mb-8 tracking-tighter text-surface-900 dark:text-surface-50">25:00</div>
+              <div class="flex justify-center gap-3">
+                <button id="start-timer" class="btn btn-primary flex-1">Start</button>
+                <button id="pause-timer" class="btn btn-secondary flex-1">Pause</button>
+                <button id="reset-timer" class="btn btn-secondary">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+              <div class="mt-8">
+                <select id="timer-mode" class="form-input w-full font-medium text-surface-700 dark:text-surface-300">
+                  <option value="pomodoro">Focus Session (25 min)</option>
                   <option value="shortBreak">Short Break (5 min)</option>
                   <option value="longBreak">Long Break (15 min)</option>
                 </select>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div class="card p-6">
+          <!-- Tasks -->
+          <section class="card p-8">
             <div class="flex justify-between items-center mb-6">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">My Tasks</h2>
-              <button id="sync-tasks-btn" class="btn btn-primary text-sm">Sync Tasks</button>
+              <div class="flex items-center space-x-3">
+                <div class="p-2 bg-brand-50 dark:bg-brand-500/10 rounded-lg text-brand-500">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                </div>
+                <h2 class="text-lg font-bold text-surface-900 dark:text-surface-50">My Tasks</h2>
+              </div>
+              <button id="sync-tasks-btn" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline">Sync with Google</button>
             </div>
-            <div id="tasks-container" class="space-y-3"></div>
-            <div class="mt-6">
+            <div id="tasks-container" class="space-y-4 max-h-64 overflow-y-auto pr-2 chat-container"></div>
+            <div class="mt-8">
               <form id="add-task-form" class="space-y-4">
-                <input type="text" id="new-task-input" placeholder="Add a new task..." class="form-input w-full">
-                <input type="datetime-local" id="task-due" class="form-input w-full">
-                <button type="submit" class="btn btn-primary w-full">Add Task</button>
+                <input type="text" id="new-task-input" placeholder="What needs to be done?" class="form-input w-full">
+                <div class="flex gap-3">
+                  <input type="datetime-local" id="task-due" class="form-input flex-grow text-sm">
+                  <button type="submit" class="btn btn-primary px-4">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </button>
+                </div>
               </form>
             </div>
-          </div>
+          </section>
         </div>
 
-        <div class="lg:col-span-2">
-          <div class="card p-6">
-            <h2 class="text-xl font-semibold mb-6 text-gray-900 dark:text-gray-100">Time Management Coach</h2>
-            <div id="chat-container" class="h-96 overflow-y-auto mb-4 space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg"></div>
-            <form id="chat-form" class="flex space-x-2">
-              <input type="text" id="user-input" placeholder="Type your message..." class="form-input flex-grow">
-              <button type="submit" class="btn btn-primary">Send</button>
+        <!-- Chat Coach -->
+        <div class="lg:col-span-8">
+          <section class="card h-full flex flex-col p-8 min-h-[600px]">
+            <div class="flex items-center space-x-3 mb-8">
+              <div class="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg text-indigo-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </div>
+              <div>
+                <h2 class="text-lg font-bold text-surface-900 dark:text-surface-50 leading-tight">AI Coach</h2>
+                <p class="text-xs text-surface-500 font-medium">Personal productivity strategist</p>
+              </div>
+            </div>
+            
+            <div id="chat-container" class="flex-grow overflow-y-auto mb-8 space-y-6 pr-4 chat-container"></div>
+            
+            <form id="chat-form" class="relative">
+              <input type="text" id="user-input" placeholder="Ask your coach anything..." 
+                     class="form-input w-full pr-14 py-4 text-base shadow-sm">
+              <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-all shadow-md shadow-brand-500/20">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+              </button>
             </form>
-          </div>
+          </section>
         </div>
       </div>
-    </div>
+    </main>
 
     <footer class="bg-white dark:bg-gray-800 shadow-md mt-auto border-t border-gray-200 dark:border-gray-700">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         <div class="flex flex-col items-center justify-center space-y-1">
           <div class="flex items-center space-x-1">
             <svg class="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Developed by</p>
           </div>
