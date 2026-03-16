@@ -713,3 +713,4 @@ async function generateAIResponse(message) {
         return 'I\'m sorry, I couldn\'t process your request. Please try again.';
     }
 }
+}
