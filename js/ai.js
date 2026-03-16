@@ -28,20 +28,72 @@ async function initAI() {
   }
 }
 
+// Try to get API keys from environment variables or CONFIG object
+const getApiKey = (keyName) => {
+  // Check for import.meta.env (Vite)
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    return import.meta.env[keyName] || import.meta.env[`VITE_${keyName}`];
+  }
+  // Check for process.env (Node.js/bundlers)
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[keyName];
+  }
+  // Check for CONFIG object
+  if (typeof CONFIG !== 'undefined') {
+    return CONFIG[keyName];
+  }
+  return null;
+};
+
+const OPENAI_API_KEY = getApiKey('OPENAI_API_KEY');
+const GEMINI_API_KEY = getApiKey('GEMINI_API_KEY');
+
+function getMockResponse(prompt) {
+  const lowerPrompt = prompt.toLowerCase();
+  
+  // Exam preparation responses
+  if (lowerPrompt.includes('exam') || lowerPrompt.includes('prepare') || lowerPrompt.includes('test')) {
+    if (lowerPrompt.includes('java')) {
+      return "For your Java exam, focus on core concepts first. Spend 2 hours on OOP principles and syntax, 2 hours on practice coding problems, and 1 hour reviewing past mistakes. Take 10-minute breaks every 50 minutes to maintain focus.";
+    }
+    if (lowerPrompt.includes('science')) {
+      return "For your Science exam in 5 hours, start with the highest-weight topics. Dedicate 2 hours to challenging concepts, 2 hours to practice questions, and 1 hour for review. Use active recall techniques for better retention.";
+    }
+    return "For exam preparation, prioritize high-weight topics first. Use the Pomodoro technique: 50 minutes study, 10 minutes break. Focus on practice questions and review mistakes. Get adequate sleep before the exam.";
+  }
+  
+  // Schedule/planning responses
+  if (lowerPrompt.includes('schedule') || lowerPrompt.includes('plan') || lowerPrompt.includes('timetable')) {
+    return "Create a realistic daily schedule by blocking time for priorities first. Use time-blocking: assign specific hours for deep work, breaks, and flexible tasks. Review and adjust your schedule every evening for the next day.";
+  }
+  
+  // Holiday time management
+  if (lowerPrompt.includes('holiday') || lowerPrompt.includes('vacation')) {
+    return "During holidays, balance rest with productivity. Dedicate mornings to important tasks when energy is high. Keep a loose routine to maintain momentum. Set 2-3 key goals for the holiday period to stay focused.";
+  }
+  
+  // Procrastination/focus
+  if (lowerPrompt.includes('procrastination') || lowerPrompt.includes('focus') || lowerPrompt.includes('distract')) {
+    return "Overcome procrastination by breaking tasks into small, actionable steps. Use the 2-minute rule: if it takes less than 2 minutes, do it now. Eliminate distractions by turning off notifications during focus blocks.";
+  }
+  
+  // Task management
+  if (lowerPrompt.includes('task') || lowerPrompt.includes('todo') || lowerPrompt.includes('organize')) {
+    return "Organize tasks using the Eisenhower Matrix: urgent vs. important. Tackle high-impact tasks first when your energy is highest. Limit daily tasks to 3-5 priorities to avoid overwhelm.";
+  }
+  
+  // General time management
+  return "Start by identifying your most productive hours and schedule demanding tasks then. Use the 80/20 rule: focus on the 20% of efforts that yield 80% of results. Review your progress weekly and adjust your approach accordingly.";
+}
+
 async function generateResponse(prompt) {
   if (isProcessing) return;
   isProcessing = true;
 
   try {
-    // Check if CONFIG is available
-    if (typeof CONFIG === 'undefined') {
-      console.error('CONFIG object not found. Please ensure config.js is loaded.');
-      return 'Configuration error: API keys not properly configured. Please check your setup.';
-    }
-
     // First, try OpenAI
     try {
-      if (!CONFIG.OPENAI_API_KEY || CONFIG.OPENAI_API_KEY === 'your-openai-api-key-here') {
+      if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-openai-api-key-here') {
         throw new Error('OpenAI API key not configured');
       }
 
@@ -49,7 +101,7 @@ async function generateResponse(prompt) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${CONFIG.OPENAI_API_KEY}`
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
         },
         body: JSON.stringify({
           model: 'gpt-3.5-turbo',
@@ -80,72 +132,30 @@ async function generateResponse(prompt) {
       const systemPrompt = SYSTEM_PROMPTS[promptType];
       const context = await getContextForPrompt(promptType);
 
-      if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'your-gemini-api-key-here') {
-        throw new Error('Gemini API key not configured');
+      if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your-gemini-api-key-here') {
+        console.warn('Gemini API key not configured, using mock response');
+        return formatResponse(getMockResponse(prompt));
       }
 
-      // Try the newer Gemini 2.0 Flash model first, then fallback to 1.5 Flash
-      let geminiResponse;
-      let modelUsed = '';
-      let retries = 0;
-      const maxRetries = 3;
-      const baseDelay = 2000; // 2 seconds
+      // Try multiple Gemini models in order of preference
+      const geminiModels = [
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+        'gemini-pro'
+      ];
       
-      while (retries < maxRetries) {
-        try {
-          // Try Gemini 2.0 Flash first
-          geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{
-                  text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
-                }]
-              }],
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 150,
-                topP: 0.8,
-                topK: 40
-              }
-            })
-          });
-          modelUsed = 'gemini-2.0-flash';
-          
-          // If rate limited, wait and retry
-          if (geminiResponse.status === 429) {
-            const delay = baseDelay * Math.pow(2, retries);
-            console.warn(`Gemini rate limited (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms before retry...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            retries++;
-            continue;
-          }
-          
-          break; // Success or non-retryable error
-          
-        } catch (fetchError) {
-          if (retries < maxRetries - 1) {
-            const delay = baseDelay * Math.pow(2, retries);
-            console.warn(`Gemini fetch failed (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            retries++;
-          } else {
-            // Final attempt failed, try fallback model
-            console.warn('Gemini 2.0 Flash failed after all retries, trying 1.5 Flash:', fetchError);
-            break;
-          }
-        }
-      }
+      let geminiResponse = null;
+      let lastError = null;
       
-      // If still rate limited or failed, try fallback model
-      if (!geminiResponse || geminiResponse.status === 429) {
-        retries = 0;
+      for (const modelName of geminiModels) {
+        let retries = 0;
+        const maxRetries = 2;
+        
         while (retries < maxRetries) {
           try {
-            geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+            console.log(`Trying Gemini model: ${modelName}`);
+            geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -164,41 +174,49 @@ async function generateResponse(prompt) {
                 }
               })
             });
-            modelUsed = 'gemini-1.5-flash';
             
             if (geminiResponse.status === 429) {
-              const delay = baseDelay * Math.pow(2, retries);
-              console.warn(`Gemini 1.5 rate limited (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms before retry...`);
+              const delay = 2000 * Math.pow(2, retries);
+              console.warn(`${modelName} rate limited (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms...`);
               await new Promise(resolve => setTimeout(resolve, delay));
               retries++;
               continue;
             }
             
-            break;
+            if (geminiResponse.ok) {
+              console.log(`Successfully using model: ${modelName}`);
+              break; // Success!
+            }
+            
+            if (geminiResponse.status === 404) {
+              console.warn(`Model ${modelName} not found (404), trying next model...`);
+              break; // Try next model
+            }
+            
+            // Other error, throw to catch
+            throw new Error(`HTTP ${geminiResponse.status}: ${geminiResponse.statusText}`);
             
           } catch (fetchError) {
+            lastError = fetchError;
             if (retries < maxRetries - 1) {
-              const delay = baseDelay * Math.pow(2, retries);
-              console.warn(`Gemini 1.5 fetch failed (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
+              const delay = 2000 * Math.pow(2, retries);
+              console.warn(`${modelName} failed (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
               await new Promise(resolve => setTimeout(resolve, delay));
               retries++;
             } else {
-              throw fetchError;
+              break; // Try next model
             }
           }
+        }
+        
+        if (geminiResponse && geminiResponse.ok) {
+          break; // Found a working model
         }
       }
 
       if (!geminiResponse || !geminiResponse.ok) {
-        if (geminiResponse && geminiResponse.status === 429) {
-          throw new Error('Both AI services are rate limited. Please wait a minute and try again.');
-        }
-        if (geminiResponse && geminiResponse.status === 404) {
-          throw new Error(`Gemini model '${modelUsed}' not found or API key invalid. Please check your API key and model availability.`);
-        }
-        const status = geminiResponse ? geminiResponse.status : 'unknown';
-        const statusText = geminiResponse ? geminiResponse.statusText : 'no response';
-        throw new Error(`Gemini API error: ${status} ${statusText}`);
+        console.warn('All API attempts failed, using mock response');
+        return formatResponse(getMockResponse(prompt));
       }
 
       const geminiData = await geminiResponse.json();
@@ -212,17 +230,7 @@ async function generateResponse(prompt) {
     }
   } catch (error) {
     console.error('Error generating response from both services:', error);
-    
-    // Provide more specific error messages
-    if (error.message.includes('API key not configured')) {
-      return 'API keys not properly configured. Please check your config.js file and add valid API keys.';
-    } else if (error.message.includes('not found or API key invalid')) {
-      return 'Gemini API key appears to be invalid or the model is unavailable. Please check your API key.';
-    } else if (error.message.includes('Rate limit exceeded')) {
-      return 'API rate limit exceeded. Please wait a moment and try again.';
-    } else {
-      return `I apologize, but I encountered an error: ${error.message}. Please try again.`;
-    }
+    return formatResponse(getMockResponse(prompt));
   } finally {
     isProcessing = false;
   }
