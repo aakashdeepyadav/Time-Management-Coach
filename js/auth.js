@@ -61,45 +61,17 @@ document.getElementById('google-signin-btn').addEventListener('click', () => {
   tokenClient.requestAccessToken();
 });
 
-document.getElementById('guest-login-btn').addEventListener('click', () => {
-  if (window.firebase && firebase.auth) {
-    firebase.auth().signInAnonymously()
-      .then(result => {
-        userProfile = {
-          id: result.user.uid,
-          name: 'Guest User',
-          email: '',
-          picture: 'https://img.freepik.com/free-vector/blue-circle-with-white-user_78370-4707.jpg'
-        };
-        localStorage.setItem('timeGuardUserProfile', JSON.stringify(userProfile));
-        localStorage.setItem('timeGuardGuest', '1'); 
-        localStorage.removeItem('timeGuardAccessToken');
-        handleSuccessfulLogin();
-      })
-      .catch(() => {
-        userProfile = {
-          id: 'guest-' + Date.now(),
-          name: 'Guest User',
-          email: '',
-          picture: 'https://img.freepik.com/free-vector/blue-circle-with-white-user_78370-4707.jpg'
-        };
-        localStorage.setItem('timeGuardUserProfile', JSON.stringify(userProfile));
-        localStorage.setItem('timeGuardGuest', '1'); 
-        localStorage.removeItem('timeGuardAccessToken');
-        handleSuccessfulLogin();
-      });
-  } else {
-    userProfile = {
-      id: 'guest-' + Date.now(),
-      name: 'Guest User',
-      email: '',
-      picture: 'https://img.freepik.com/free-vector/blue-circle-with-white-user_78370-4707.jpg'
-    };
-    localStorage.setItem('timeGuardUserProfile', JSON.stringify(userProfile));
-    localStorage.setItem('timeGuardGuest', '1'); 
-    localStorage.removeItem('timeGuardAccessToken');
-    handleSuccessfulLogin();
-  }
+document.getElementById('skip-login-btn').addEventListener('click', () => {
+  userProfile = {
+    id: 'guest-' + Date.now(),
+    name: 'Guest User',
+    email: '',
+    picture: 'https://img.freepik.com/free-vector/blue-circle-with-white-user_78370-4707.jpg'
+  };
+  localStorage.setItem('timeGuardUserProfile', JSON.stringify(userProfile));
+  localStorage.setItem('timeGuardGuest', '1'); 
+  localStorage.removeItem('timeGuardAccessToken');
+  handleSuccessfulLogin();
 });
 
 function clearAppState() {
@@ -157,6 +129,15 @@ function handleSuccessfulLogin() {
   document.getElementById('user-name').textContent = userProfile.name;
   document.getElementById('user-avatar').src = userProfile.picture;
   document.getElementById('user-avatar').style.display = 'block';
+  
+  const isGuest = localStorage.getItem('timeGuardGuest');
+  const syncBtn = document.getElementById('sync-tasks-btn');
+  if (isGuest === '1' && syncBtn) {
+    syncBtn.style.display = 'none';
+  } else if (syncBtn) {
+    syncBtn.style.display = 'block';
+  }
+  
   showWelcomeMessage();
 }
 

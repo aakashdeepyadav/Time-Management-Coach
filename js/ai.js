@@ -33,13 +33,39 @@ async function generateResponse(prompt) {
   isProcessing = true;
 
   try {
-    const promptType = determinePromptType(prompt);
-    const systemPrompt = SYSTEM_PROMPTS[promptType];
-    
-    const context = await getContextForPrompt(promptType);
-    
-    const response = await Promise.race([
-      fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+    // First, try OpenAI
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 150
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('OpenAI request failed');
+      }
+
+      const data = await response.json();
+      const responseText = data.choices[0].message.content.trim();
+      return formatResponse(responseText);
+
+    } catch (error) {
+      console.warn('OpenAI failed, falling back to Gemini:', error);
+
+      // Fallback to Gemini
+      const promptType = determinePromptType(prompt);
+      const systemPrompt = SYSTEM_PROMPTS[promptType];
+      const context = await getContextForPrompt(promptType);
+
+      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -57,20 +83,18 @@ async function generateResponse(prompt) {
             topK: 40
           }
         })
-      }).then(res => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.json();
-      }),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Response timeout')), 10000) 
-      )
-    ]);
-    
-    const responseText = response.candidates[0].content.parts[0].text;
-    return formatResponse(responseText);
+      });
 
+      if (!geminiResponse.ok) {
+        throw new Error(`HTTP error! status: ${geminiResponse.status}`);
+      }
+
+      const geminiData = await geminiResponse.json();
+      const responseText = geminiData.candidates[0].content.parts[0].text;
+      return formatResponse(responseText);
+    }
   } catch (error) {
-    console.error('Error generating response:', error);
+    console.error('Error generating response from both services:', error);
     return 'I apologize, but I encountered an error. Please try again.';
   } finally {
     isProcessing = false;

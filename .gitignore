@@ -1,0 +1,8 @@
+# Generated files
+config.js
+
+# Dependencies
+node_modules
+
+# Log files
+*.log
