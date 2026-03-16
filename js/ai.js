@@ -33,8 +33,18 @@ async function generateResponse(prompt) {
   isProcessing = true;
 
   try {
+    // Check if CONFIG is available
+    if (typeof CONFIG === 'undefined') {
+      console.error('CONFIG object not found. Please ensure config.js is loaded.');
+      return 'Configuration error: API keys not properly configured. Please check your setup.';
+    }
+
     // First, try OpenAI
     try {
+      if (!CONFIG.OPENAI_API_KEY || CONFIG.OPENAI_API_KEY === 'your-openai-api-key-here') {
+        throw new Error('OpenAI API key not configured');
+      }
+
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -49,8 +59,13 @@ async function generateResponse(prompt) {
         })
       });
 
+      if (response.status === 429) {
+        console.warn('OpenAI rate limit exceeded, falling back to Gemini');
+        throw new Error('Rate limit exceeded');
+      }
+
       if (!response.ok) {
-        throw new Error('OpenAI request failed');
+        throw new Error(`OpenAI request failed: ${response.status}`);
       }
 
       const data = await response.json();
@@ -65,37 +80,90 @@ async function generateResponse(prompt) {
       const systemPrompt = SYSTEM_PROMPTS[promptType];
       const context = await getContextForPrompt(promptType);
 
-      const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 150,
-            topP: 0.8,
-            topK: 40
-          }
-        })
-      });
+      if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'your-gemini-api-key-here') {
+        throw new Error('Gemini API key not configured');
+      }
+
+      // Try the newer Gemini 2.0 Flash model first, then fallback to 1.5 Flash
+      let geminiResponse;
+      let modelUsed = '';
+      
+      try {
+        // Try Gemini 2.0 Flash first
+        geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 150,
+              topP: 0.8,
+              topK: 40
+            }
+          })
+        });
+        modelUsed = 'gemini-2.0-flash';
+      } catch (error) {
+        console.warn('Gemini 2.0 Flash failed, trying 1.5 Flash:', error);
+        // Fallback to Gemini 1.5 Flash
+        geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 150,
+              topP: 0.8,
+              topK: 40
+            }
+          })
+        });
+        modelUsed = 'gemini-1.5-flash';
+      }
 
       if (!geminiResponse.ok) {
-        throw new Error(`HTTP error! status: ${geminiResponse.status}`);
+        if (geminiResponse.status === 404) {
+          throw new Error(`Gemini model '${modelUsed}' not found or API key invalid. Please check your API key and model availability.`);
+        }
+        throw new Error(`Gemini API error: ${geminiResponse.status} ${geminiResponse.statusText}`);
       }
 
       const geminiData = await geminiResponse.json();
+      
+      if (!geminiData.candidates || !geminiData.candidates[0] || !geminiData.candidates[0].content || !geminiData.candidates[0].content.parts || !geminiData.candidates[0].content.parts[0]) {
+        throw new Error('Invalid response format from Gemini API');
+      }
+      
       const responseText = geminiData.candidates[0].content.parts[0].text;
       return formatResponse(responseText);
     }
   } catch (error) {
     console.error('Error generating response from both services:', error);
-    return 'I apologize, but I encountered an error. Please try again.';
+    
+    // Provide more specific error messages
+    if (error.message.includes('API key not configured')) {
+      return 'API keys not properly configured. Please check your config.js file and add valid API keys.';
+    } else if (error.message.includes('not found or API key invalid')) {
+      return 'Gemini API key appears to be invalid or the model is unavailable. Please check your API key.';
+    } else if (error.message.includes('Rate limit exceeded')) {
+      return 'API rate limit exceeded. Please wait a moment and try again.';
+    } else {
+      return `I apologize, but I encountered an error: ${error.message}. Please try again.`;
+    }
   } finally {
     isProcessing = false;
   }
@@ -381,6 +449,15 @@ function isTimeManagementQuery(query) {
 
 async function getAIResponse(userInput) {
   try {
+    // Check if CONFIG is available
+    if (typeof CONFIG === 'undefined') {
+      throw new Error('CONFIG object not found');
+    }
+
+    if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'your-gemini-api-key-here') {
+      throw new Error('Gemini API key not configured');
+    }
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
@@ -402,10 +479,18 @@ async function getAIResponse(userInput) {
     });
     
     if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Gemini model not found or API key invalid');
+      }
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
     const data = await response.json();
+    
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
+      throw new Error('Invalid response format from Gemini API');
+    }
+    
     return data.candidates[0].content.parts[0].text;
   } catch (error) {
     console.error('Error getting AI response:', error);
