@@ -115,24 +115,75 @@ async function loadGoogleTasks() {
 function displayTasks() {
   const container = document.getElementById('tasks-container');
   container.innerHTML = '';
-  
+
   if (tasks.length === 0) {
     container.innerHTML = '<div class="text-gray-500 text-center">No tasks found. Click Sync Tasks to fetch from Google Tasks.</div>';
     return;
   }
-  
+
   tasks.forEach(task => {
     const taskElement = document.createElement('div');
     taskElement.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-md';
     taskElement.innerHTML = `
       <div class="flex items-center">
-        <input type="checkbox" class="mr-3" ${task.completed ? 'checked' : ''}>
-        <span class="${task.completed ? 'line-through text-gray-500' : ''}">${task.title}</span>
+        <input type="checkbox" class="mr-3" ${task.completed ? 'checked' : ''} onchange="toggleTask('${task.id}')">
+        <span class="${task.completed ? 'line-through text-gray-500' : ''}" ondblclick="editTask('${task.id}')">${task.title}</span>
       </div>
       <button class="text-red-500 hover:text-red-700" onclick="deleteTask('${task.id}')">×</button>
     `;
     container.appendChild(taskElement);
   });
+}
+
+async function toggleTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) {
+    task.completed = !task.completed;
+    if (isGoogleUser) {
+      try {
+        await gapi.client.tasks.tasks.update({
+          tasklist: defaultTaskList.id,
+          task: id,
+          resource: { id, status: task.completed ? 'completed' : 'needsAction' }
+        });
+      } catch (error) {
+        showNotification('Error updating task on Google', 'error');
+        console.error('toggleTask error', error);
+        // Revert the change if the API call fails
+        task.completed = !task.completed;
+      }
+    } else {
+      saveLocalTasks();
+    }
+    renderTasks();
+  }
+}
+
+async function editTask(id) {
+  const task = tasks.find(t => t.id === id);
+  if (task) {
+    const newTitle = prompt('Enter new task title:', task.title);
+    if (newTitle && newTitle.trim() !== '') {
+      task.title = newTitle.trim();
+      if (isGoogleUser) {
+        try {
+          await gapi.client.tasks.tasks.update({
+            tasklist: defaultTaskList.id,
+            task: id,
+            resource: { id, title: task.title }
+          });
+        } catch (error) {
+          showNotification('Error updating task on Google', 'error');
+          console.error('editTask error', error);
+          // Revert the change if the API call fails
+          task.title = task.title;
+        }
+      } else {
+        saveLocalTasks();
+      }
+      renderTasks();
+    }
+  }
 }
 
 

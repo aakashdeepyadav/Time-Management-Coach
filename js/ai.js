@@ -36,10 +36,10 @@ async function generateResponse(prompt) {
     const promptType = determinePromptType(prompt);
     const systemPrompt = SYSTEM_PROMPTS[promptType];
     
-    const context = promptType === 'general' ? '' : await getContextForPrompt(promptType);
+    const context = await getContextForPrompt(promptType);
     
     const response = await Promise.race([
-      fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

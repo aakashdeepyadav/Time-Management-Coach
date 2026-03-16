@@ -42,22 +42,22 @@
     </svg>
   </button>
 
-  <div id="login-screen" class="min-h-screen flex items-center justify-center">
-    <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg max-w-md w-full">
+  <div id="login-screen" class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <div class="card p-8 max-w-md w-full">
       <h1 class="text-3xl font-bold text-center mb-6 text-blue-600 dark:text-blue-400">TM Coach</h1>
       <p class="text-center mb-8 text-gray-600 dark:text-gray-300">Your personal time management coach</p>
-      <div class="flex justify-center flex-col items-center space-y-4">
-        <button id="google-signin-btn" class="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm hover:bg-gray-50 dark:hover:bg-gray-600 flex items-center justify-center">
+      <div class="space-y-4">
+        <button id="google-signin-btn" class="btn btn-primary w-full flex items-center justify-center">
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" class="w-5 h-5 mr-2">
           Sign in with Google
         </button>
-        <button id="guest-login-btn" class="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md text-sm hover:bg-gray-300 dark:hover:bg-gray-600">Continue as Guest</button>
+        <button id="guest-login-btn" class="btn btn-secondary w-full">Continue as Guest</button>
       </div>
     </div>
   </div>
 
-  <div id="main-app" class="hidden min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
-    <nav class="bg-white dark:bg-gray-800 shadow-md">
+  <div id="main-app" class="hidden min-h-screen bg-gray-100 dark:bg-gray-800 flex flex-col">
+    <nav class="bg-white dark:bg-gray-900 shadow-md">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
           <div class="flex items-center">
@@ -66,7 +66,7 @@
           <div class="flex items-center space-x-4">
             <span id="user-name" class="text-gray-700 dark:text-gray-300"></span>
             <img id="user-avatar" class="w-8 h-8 rounded-full" src="" alt="User avatar">
-            <button id="logout-btn" class="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-md text-sm hover:bg-gray-300 dark:hover:bg-gray-600">Logout</button>
+            <button id="logout-btn" class="btn btn-secondary">Logout</button>
           </div>
         </div>
       </div>
@@ -74,55 +74,49 @@
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div class="lg:col-span-1">
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+        <div class="lg:col-span-1 space-y-8">
+          <div class="card p-6">
             <h2 class="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Pomodoro Timer</h2>
             <div class="text-center">
-              <div id="timer-display" class="text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">25:00</div>
+              <div id="timer-display" class="text-5xl font-bold mb-4 text-gray-900 dark:text-gray-100">25:00</div>
               <div class="flex justify-center space-x-4">
-                <button id="start-timer" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Start</button>
-                <button id="pause-timer" class="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700">Pause</button>
-                <button id="reset-timer" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Reset</button>
+                <button id="start-timer" class="btn btn-primary">Start</button>
+                <button id="pause-timer" class="btn btn-secondary">Pause</button>
+                <button id="reset-timer" class="btn btn-secondary">Reset</button>
               </div>
-              <div class="mt-4">
-                <select id="timer-mode" class="px-4 py-2 border rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                  <option value="25">Pomodoro (25 min)</option>
-                  <option value="5">Short Break (5 min)</option>
-                  <option value="15">Long Break (15 min)</option>
+              <div class="mt-6">
+                <select id="timer-mode" class="form-input w-full">
+                  <option value="pomodoro">Pomodoro (25 min)</option>
+                  <option value="shortBreak">Short Break (5 min)</option>
+                  <option value="longBreak">Long Break (15 min)</option>
                 </select>
               </div>
             </div>
           </div>
 
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div class="card p-6">
             <div class="flex justify-between items-center mb-6">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">My Tasks</h2>
-              <button id="sync-tasks-btn" class="px-3 py-1 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">Sync Tasks</button>
+              <button id="sync-tasks-btn" class="btn btn-primary text-sm">Sync Tasks</button>
             </div>
-            <div id="tasks-container" class="space-y-3">
-            </div>
+            <div id="tasks-container" class="space-y-3"></div>
             <div class="mt-6">
               <form id="add-task-form" class="space-y-4">
-                <div>
-                  <input type="text" id="new-task-input" placeholder="Task title..." class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                </div>
-                <div>
-                  <input type="datetime-local" id="task-due" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                </div>
-                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Add Task</button>
+                <input type="text" id="new-task-input" placeholder="Add a new task..." class="form-input w-full">
+                <input type="datetime-local" id="task-due" class="form-input w-full">
+                <button type="submit" class="btn btn-primary w-full">Add Task</button>
               </form>
             </div>
           </div>
         </div>
 
         <div class="lg:col-span-2">
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div class="card p-6">
             <h2 class="text-xl font-semibold mb-6 text-gray-900 dark:text-gray-100">Time Management Coach</h2>
-            <div id="chat-container" class="chat-container mb-4 space-y-4">
-            </div>
+            <div id="chat-container" class="h-96 overflow-y-auto mb-4 space-y-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg"></div>
             <form id="chat-form" class="flex space-x-2">
-              <input type="text" id="user-input" placeholder="Type your message..." class="flex-grow px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-              <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Send</button>
+              <input type="text" id="user-input" placeholder="Type your message..." class="form-input flex-grow">
+              <button type="submit" class="btn btn-primary">Send</button>
             </form>
           </div>
         </div>
