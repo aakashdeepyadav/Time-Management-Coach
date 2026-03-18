@@ -1,4 +1,8 @@
 let isProcessing = false;
+let fallbackContext = {
+  topic: null,
+  days: null
+};
 
 const SYSTEM_PROMPTS = {
   general: 'You are a time management coach. Give concise, practical advice in 3-4 sentences max.',
@@ -7,7 +11,15 @@ const SYSTEM_PROMPTS = {
 };
 
 function getConfig() {
-  return typeof window !== 'undefined' && window.CONFIG ? window.CONFIG : {};
+  if (typeof window !== 'undefined' && window.CONFIG) {
+    return window.CONFIG;
+  }
+
+  if (typeof CONFIG !== 'undefined') {
+    return CONFIG;
+  }
+
+  return {};
 }
 
 function getApiKey(keyName) {
@@ -52,11 +64,113 @@ function getMockResponse(prompt, expectJson = false) {
   }
 
   const lower = prompt.toLowerCase();
+  const detectedDays = extractRequestedDays(lower);
+  const detectedTopic = detectTopic(lower);
+
+  if (detectedDays) {
+    fallbackContext.days = detectedDays;
+  }
+
+  if (detectedTopic) {
+    fallbackContext.topic = detectedTopic;
+  }
+
+  const activeDays = fallbackContext.days || detectedDays;
+  const activeTopic = fallbackContext.topic || detectedTopic || 'your goal';
+
+  if (isPlanIntent(lower) && activeDays) {
+    return createDayWisePlan(activeTopic, activeDays);
+  }
+
+  if (lower.includes('how do i plan') || lower.includes('how to plan')) {
+    if (activeDays) {
+      return `Use this ${activeDays}-day structure: split each day into 3 blocks (learn, practice, review), track progress with solved questions, and keep one revision block at night. Start with easy problems, move to medium by day 2, and reserve the final day for mock tests and weak-topic revision.`;
+    }
+    return 'Plan in three layers: define your daily target, allocate focused study blocks, then end with a short review of mistakes. Keep one clear metric each day like problems solved or topics completed.';
+  }
+
   if (lower.includes('exam') || lower.includes('test')) {
     return 'Start with the highest-weight topics first. Use 50 minutes focused study and 10 minutes break cycles. End with active recall and quick revision of weak areas.';
   }
 
+  if (lower.includes('dsa')) {
+    return 'For DSA, prioritize one topic block, one coding practice block, and one revision block daily. Focus on arrays/strings first, then hashmaps/sliding window, then trees/graphs. Solve and review at least 15 to 20 problems each day with error notes.';
+  }
+
   return 'Block your day by priority, not by urgency alone. Start with one deep-work block, then batch shallow tasks later. Review progress at the end of the day and adjust tomorrow\'s plan.';
+}
+
+function extractRequestedDays(lowerPrompt) {
+  const numericMatch = lowerPrompt.match(/(\d{1,2})\s*days?/);
+  if (numericMatch && numericMatch[1]) {
+    const parsed = parseInt(numericMatch[1], 10);
+    if (parsed >= 1 && parsed <= 30) {
+      return parsed;
+    }
+  }
+
+  if (lowerPrompt.includes('one week') || lowerPrompt.includes('a week') || lowerPrompt.includes('weekly')) {
+    return 7;
+  }
+
+  if (lowerPrompt.includes('five days')) {
+    return 5;
+  }
+
+  if (lowerPrompt.includes('seven days')) {
+    return 7;
+  }
+
+  return null;
+}
+
+function detectTopic(lowerPrompt) {
+  if (lowerPrompt.includes('dsa')) {
+    return 'DSA';
+  }
+  if (lowerPrompt.includes('exam')) {
+    return 'exam preparation';
+  }
+  if (lowerPrompt.includes('interview')) {
+    return 'interview preparation';
+  }
+  return null;
+}
+
+function isPlanIntent(lowerPrompt) {
+  return lowerPrompt.includes('plan') ||
+    lowerPrompt.includes('schedule') ||
+    lowerPrompt.includes('roadmap') ||
+    lowerPrompt.includes('prepare');
+}
+
+function createDayWisePlan(topic, days) {
+  const dsaTopics = [
+    'Arrays and Strings',
+    'Hashing and Two Pointers',
+    'Sliding Window and Binary Search',
+    'Recursion and Backtracking',
+    'Linked List and Stack/Queue',
+    'Trees and Heaps',
+    'Graphs and Dynamic Programming'
+  ];
+
+  const planLines = [];
+  for (let day = 1; day <= days; day += 1) {
+    const topicName = topic === 'DSA'
+      ? dsaTopics[(day - 1) % dsaTopics.length]
+      : `${topic} - priority module ${day}`;
+
+    let line = `Day ${day}: ${topicName} -> 2h concept learning, 2h problem solving, 1h revision and error log.`;
+
+    if (day === days) {
+      line = `Day ${day}: Full revision + timed mock practice -> 2h mixed problems, 2h weak-area fixes, 1h formula/pattern recap.`;
+    }
+
+    planLines.push(line);
+  }
+
+  return `Here is your ${days}-day ${topic} plan:\n${planLines.join('\n')}\n\nDaily rule: use 50/10 focus cycles, track solved problems, and review mistakes every night.`;
 }
 
 function determinePromptType(prompt, expectJson = false) {

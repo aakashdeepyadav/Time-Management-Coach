@@ -20,7 +20,9 @@ function enableGoogleSignIn() {
 }
 
 function initGoogleAuth() {
-  const config = typeof window !== 'undefined' && window.CONFIG ? window.CONFIG : null;
+  const config = (typeof window !== 'undefined' && window.CONFIG)
+    ? window.CONFIG
+    : (typeof CONFIG !== 'undefined' ? CONFIG : null);
   if (!config || !config.GOOGLE_CLIENT_ID || config.GOOGLE_CLIENT_ID === 'your-google-client-id-here') {
     console.warn('Google auth is disabled: missing GOOGLE_CLIENT_ID in config.js');
     return;

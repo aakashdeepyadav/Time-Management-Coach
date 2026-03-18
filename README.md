@@ -33,6 +33,21 @@ A browser-based productivity assistant with:
 3. Add your real keys.
 4. Run from a local HTTP server (recommended) instead of opening as `file:///`.
 
+## Environment Variables (Netlify/CI)
+
+This project supports environment-variable based config generation through `build.sh`.
+
+- Netlify runs `build.sh` (configured in [netlify.toml](netlify.toml)) and creates `config.js` at build time.
+- Set these environment variables in Netlify site settings:
+  - `OPENAI_API_KEY`
+  - `GEMINI_API_KEY`
+  - `GOOGLE_CLIENT_ID` (optional)
+
+Important for local development:
+
+- Browser JavaScript cannot read your machine environment variables directly.
+- Locally, either create `config.js` manually or run a script that generates it before serving the app.
+
 ### config.js Example
 
 ```javascript
