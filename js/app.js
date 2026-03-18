@@ -116,7 +116,7 @@ function setupEventListeners() {
 function isAutoTaskSyncEnabled() {
   const storedValue = localStorage.getItem(AUTO_TASK_PREF_KEY);
   if (storedValue === null) {
-    return true;
+    return false;
   }
   return storedValue === '1';
 }
@@ -130,7 +130,10 @@ function initAutoTaskToggle() {
   toggle.addEventListener('change', () => {
     const enabled = toggle.checked;
     localStorage.setItem(AUTO_TASK_PREF_KEY, enabled ? '1' : '0');
-    showNotification(enabled ? 'Auto-add tasks enabled' : 'Auto-add tasks disabled', 'success');
+    showNotification(
+      enabled ? 'Task auto-add enabled (explicit request only)' : 'Task auto-add disabled',
+      'success'
+    );
   });
 }
 
@@ -235,6 +238,28 @@ function shouldAutoCreateTasksFromPrompt(prompt) {
     lower.includes('dsa');
 }
 
+function userExplicitlyRequestedTaskCreation(prompt) {
+  const lower = prompt.toLowerCase();
+  const explicitPatterns = [
+    /\badd\b.{0,35}\btasks?\b/,
+    /\bcreate\b.{0,35}\btasks?\b/,
+    /\bmake\b.{0,35}\btasks?\b/,
+    /\bsave\b.{0,35}\btasks?\b/,
+    /\bput\b.{0,35}\btasks?\b/,
+    /\bconvert\b.{0,35}\bto\b.{0,20}\btasks?\b/,
+    /\btaskify\b/,
+    /\badd this plan\b/,
+    /\badd this to my tasks\b/
+  ];
+
+  return explicitPatterns.some((pattern) => pattern.test(lower));
+}
+
+function responseLooksLikeTaskPlan(responseText) {
+  const text = String(responseText || '');
+  return /^Day\s*\d+\s*:/im.test(text) || /^-\s*Block\b/im.test(text);
+}
+
 function getExistingTaskTitles() {
   const titleNodes = document.querySelectorAll('#tasks-container .task-item h3');
   return new Set(Array.from(titleNodes).map(node => node.textContent.trim().toLowerCase()));
@@ -284,6 +309,14 @@ async function maybeAutoAddPlanTasks(userPrompt, responseText) {
   }
 
   if (!shouldAutoCreateTasksFromPrompt(userPrompt)) {
+    return 0;
+  }
+
+  if (!userExplicitlyRequestedTaskCreation(userPrompt)) {
+    return 0;
+  }
+
+  if (!responseLooksLikeTaskPlan(responseText)) {
     return 0;
   }
 

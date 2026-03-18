@@ -9,7 +9,7 @@ const MAX_CONTEXT_MESSAGES = 8;
 const MEMORY_STORAGE_KEY = 'tmCoachConversationMemory';
 
 const SYSTEM_PROMPTS = {
-  general: 'You are a time management coach. Give detailed, practical, and well-structured plans. Use clear sections, short bullet points, and concrete action steps with timelines.',
+  general: 'You are a time management coach. Provide concise, practical, and well-structured guidance with clear steps, realistic timelines, and concrete next actions. Do not return JSON unless explicitly asked.',
   schedule: 'You are a time management coach. Return only a JSON array of tasks with fields: time, title, notes.',
   analysis: 'You are a time management coach. Analyze the user context and suggest practical improvements.'
 };
@@ -321,7 +321,7 @@ function determinePromptType(prompt, expectJson = false) {
   }
 
   const lower = prompt.toLowerCase();
-  if (lower.includes('schedule') || lower.includes('plan') || lower.includes('timetable')) {
+  if (lower.includes('json array of tasks') || lower.includes('return json')) {
     return 'schedule';
   }
   if (lower.includes('analyze') || lower.includes('review') || lower.includes('improve')) {
