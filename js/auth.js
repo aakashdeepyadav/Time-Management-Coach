@@ -20,8 +20,14 @@ function enableGoogleSignIn() {
 }
 
 function initGoogleAuth() {
+  const config = typeof window !== 'undefined' && window.CONFIG ? window.CONFIG : null;
+  if (!config || !config.GOOGLE_CLIENT_ID || config.GOOGLE_CLIENT_ID === 'your-google-client-id-here') {
+    console.warn('Google auth is disabled: missing GOOGLE_CLIENT_ID in config.js');
+    return;
+  }
+
   tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CONFIG.GOOGLE_CLIENT_ID,
+    client_id: config.GOOGLE_CLIENT_ID,
     scope: SCOPES,
     callback: async (tokenResponse) => {
       if (tokenResponse && tokenResponse.access_token) {

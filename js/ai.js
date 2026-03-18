@@ -1,727 +1,284 @@
-
-let chatHistory = [];
 let isProcessing = false;
-let userSchedule = [];
 
 const SYSTEM_PROMPTS = {
-  general: `You are a time management coach. Your role is to help users improve their productivity and time management skills.
-            Provide concise, actionable advice about time management, productivity, and task organization.
-            Focus on practical tips and techniques that can be implemented immediately.
-            For urgent exam preparation, prioritize high-impact study strategies and time allocation.`,
-  
-  schedule: `You are a time management coach helping to create a daily schedule.
-            For urgent exam preparation, focus on priority topics and effective review techniques.
-            Consider remaining time constraints and suggest optimal time blocks for different subjects.
-            Format the schedule in a clear, time-blocked structure with specific review goals.`,
-  
-  analysis: `You are a time management coach analyzing the user's current schedule and tasks.
-            For exam preparation, identify critical areas to focus on in limited time.
-            Suggest ways to maximize retention and understanding in short study sessions.
-            Focus on practical strategies for last-minute review and stress management.`
+  general: 'You are a time management coach. Give concise, practical advice in 3-4 sentences max.',
+  schedule: 'You are a time management coach. Return only a JSON array of tasks with fields: time, title, notes.',
+  analysis: 'You are a time management coach. Analyze the user context and suggest practical improvements.'
 };
 
-async function initAI() {
-  console.log('AI initialized with Gemini API');
-  const savedSchedule = localStorage.getItem('userSchedule');
-  if (savedSchedule) {
-    userSchedule = JSON.parse(savedSchedule);
-  }
+function getConfig() {
+  return typeof window !== 'undefined' && window.CONFIG ? window.CONFIG : {};
 }
 
-// Try to get API keys from environment variables or CONFIG object
-const getApiKey = (keyName) => {
-  // Check for import.meta.env (Vite)
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return import.meta.env[keyName] || import.meta.env[`VITE_${keyName}`];
-  }
-  // Check for process.env (Node.js/bundlers)
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[keyName];
-  }
-  // Check for CONFIG object
-  if (typeof CONFIG !== 'undefined') {
-    return CONFIG[keyName];
-  }
-  return null;
-};
+function getApiKey(keyName) {
+  const config = getConfig();
+  const value = config[keyName];
 
-const OPENAI_API_KEY = getApiKey('OPENAI_API_KEY');
-const GEMINI_API_KEY = getApiKey('GEMINI_API_KEY');
+  if (typeof value !== 'string') {
+    return null;
+  }
 
-function getMockResponse(prompt) {
-  const lowerPrompt = prompt.toLowerCase();
-  
-  // Exam preparation responses
-  if (lowerPrompt.includes('exam') || lowerPrompt.includes('prepare') || lowerPrompt.includes('test')) {
-    if (lowerPrompt.includes('java')) {
-      return "For your Java exam, focus on core concepts first. Spend 2 hours on OOP principles and syntax, 2 hours on practice coding problems, and 1 hour reviewing past mistakes. Take 10-minute breaks every 50 minutes to maintain focus.";
-    }
-    if (lowerPrompt.includes('science')) {
-      return "For your Science exam in 5 hours, start with the highest-weight topics. Dedicate 2 hours to challenging concepts, 2 hours to practice questions, and 1 hour for review. Use active recall techniques for better retention.";
-    }
-    return "For exam preparation, prioritize high-weight topics first. Use the Pomodoro technique: 50 minutes study, 10 minutes break. Focus on practice questions and review mistakes. Get adequate sleep before the exam.";
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
   }
-  
-  // Schedule/planning responses
-  if (lowerPrompt.includes('schedule') || lowerPrompt.includes('plan') || lowerPrompt.includes('timetable')) {
-    return "Create a realistic daily schedule by blocking time for priorities first. Use time-blocking: assign specific hours for deep work, breaks, and flexible tasks. Review and adjust your schedule every evening for the next day.";
+
+  if (trimmed.includes('your-openai-api-key-here') || trimmed.includes('your-gemini-api-key-here')) {
+    return null;
   }
-  
-  // Holiday time management
-  if (lowerPrompt.includes('holiday') || lowerPrompt.includes('vacation')) {
-    return "During holidays, balance rest with productivity. Dedicate mornings to important tasks when energy is high. Keep a loose routine to maintain momentum. Set 2-3 key goals for the holiday period to stay focused.";
-  }
-  
-  // Procrastination/focus
-  if (lowerPrompt.includes('procrastination') || lowerPrompt.includes('focus') || lowerPrompt.includes('distract')) {
-    return "Overcome procrastination by breaking tasks into small, actionable steps. Use the 2-minute rule: if it takes less than 2 minutes, do it now. Eliminate distractions by turning off notifications during focus blocks.";
-  }
-  
-  // Task management
-  if (lowerPrompt.includes('task') || lowerPrompt.includes('todo') || lowerPrompt.includes('organize')) {
-    return "Organize tasks using the Eisenhower Matrix: urgent vs. important. Tackle high-impact tasks first when your energy is highest. Limit daily tasks to 3-5 priorities to avoid overwhelm.";
-  }
-  
-  // General time management
-  return "Start by identifying your most productive hours and schedule demanding tasks then. Use the 80/20 rule: focus on the 20% of efforts that yield 80% of results. Review your progress weekly and adjust your approach accordingly.";
+
+  return trimmed;
 }
 
-async function generateResponse(prompt) {
-  if (isProcessing) return;
-  isProcessing = true;
-
-  try {
-    // First, try OpenAI
-    try {
-      if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-openai-api-key-here') {
-        throw new Error('OpenAI API key not configured');
+function getMockResponse(prompt, expectJson = false) {
+  if (expectJson) {
+    return JSON.stringify([
+      {
+        time: '08:00 AM',
+        title: 'Plan Top 3 Priorities',
+        notes: 'List high-impact tasks and estimated effort.'
+      },
+      {
+        time: '10:00 AM',
+        title: 'Deep Work Session',
+        notes: '50 min focus + 10 min break using Pomodoro.'
+      },
+      {
+        time: '02:00 PM',
+        title: 'Review and Adjust',
+        notes: 'Check progress and move unfinished tasks.'
       }
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          max_tokens: 150
-        })
-      });
-
-      if (response.status === 429) {
-        console.warn('OpenAI rate limit exceeded, falling back to Gemini');
-        throw new Error('Rate limit exceeded');
-      }
-
-      if (!response.ok) {
-        throw new Error(`OpenAI request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const responseText = data.choices[0].message.content.trim();
-      return formatResponse(responseText);
-
-    } catch (error) {
-      console.warn('OpenAI failed, falling back to Gemini:', error);
-
-      // Fallback to Gemini
-      const promptType = determinePromptType(prompt);
-      const systemPrompt = SYSTEM_PROMPTS[promptType];
-      const context = await getContextForPrompt(promptType);
-
-      if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your-gemini-api-key-here') {
-        console.warn('Gemini API key not configured, using mock response');
-        return formatResponse(getMockResponse(prompt));
-      }
-
-      // Try multiple Gemini models in order of preference
-      const geminiModels = [
-        'gemini-2.0-flash',
-        'gemini-1.5-flash',
-        'gemini-1.5-pro',
-        'gemini-pro'
-      ];
-      
-      let geminiResponse = null;
-      let lastError = null;
-      
-      for (const modelName of geminiModels) {
-        let retries = 0;
-        const maxRetries = 2;
-        
-        while (retries < maxRetries) {
-          try {
-            console.log(`Trying Gemini model: ${modelName}`);
-            geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                contents: [{
-                  parts: [{
-                    text: `${systemPrompt}\n\nContext: ${context}\n\nUser's message: ${prompt}\n\nPlease provide a concise response (max 3-4 sentences) focusing on practical time management advice.`
-                  }]
-                }],
-                generationConfig: {
-                  temperature: 0.7,
-                  maxOutputTokens: 150,
-                  topP: 0.8,
-                  topK: 40
-                }
-              })
-            });
-            
-            if (geminiResponse.status === 429) {
-              const delay = 2000 * Math.pow(2, retries);
-              console.warn(`${modelName} rate limited (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              retries++;
-              continue;
-            }
-            
-            if (geminiResponse.ok) {
-              console.log(`Successfully using model: ${modelName}`);
-              break; // Success!
-            }
-            
-            if (geminiResponse.status === 404) {
-              console.warn(`Model ${modelName} not found (404), trying next model...`);
-              break; // Try next model
-            }
-            
-            // Other error, throw to catch
-            throw new Error(`HTTP ${geminiResponse.status}: ${geminiResponse.statusText}`);
-            
-          } catch (fetchError) {
-            lastError = fetchError;
-            if (retries < maxRetries - 1) {
-              const delay = 2000 * Math.pow(2, retries);
-              console.warn(`${modelName} failed (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              retries++;
-            } else {
-              break; // Try next model
-            }
-          }
-        }
-        
-        if (geminiResponse && geminiResponse.ok) {
-          break; // Found a working model
-        }
-      }
-
-      if (!geminiResponse || !geminiResponse.ok) {
-        console.warn('All API attempts failed, using mock response');
-        return formatResponse(getMockResponse(prompt));
-      }
-
-      const geminiData = await geminiResponse.json();
-      
-      if (!geminiData.candidates || !geminiData.candidates[0] || !geminiData.candidates[0].content || !geminiData.candidates[0].content.parts || !geminiData.candidates[0].content.parts[0]) {
-        throw new Error('Invalid response format from Gemini API');
-      }
-      
-      const responseText = geminiData.candidates[0].content.parts[0].text;
-      return formatResponse(responseText);
-    }
-  } catch (error) {
-    console.error('Error generating response from both services:', error);
-    return formatResponse(getMockResponse(prompt));
-  } finally {
-    isProcessing = false;
+    ]);
   }
+
+  const lower = prompt.toLowerCase();
+  if (lower.includes('exam') || lower.includes('test')) {
+    return 'Start with the highest-weight topics first. Use 50 minutes focused study and 10 minutes break cycles. End with active recall and quick revision of weak areas.';
+  }
+
+  return 'Block your day by priority, not by urgency alone. Start with one deep-work block, then batch shallow tasks later. Review progress at the end of the day and adjust tomorrow\'s plan.';
 }
 
-function determinePromptType(prompt) {
-  const lowerPrompt = prompt.toLowerCase();
-  
-  if (lowerPrompt.includes('schedule') || lowerPrompt.includes('timetable') || 
-      lowerPrompt.includes('plan') || lowerPrompt.includes('organize my day')) {
+function determinePromptType(prompt, expectJson = false) {
+  if (expectJson) {
     return 'schedule';
-  } else if (lowerPrompt.includes('analyze') || lowerPrompt.includes('review') || 
-             lowerPrompt.includes('how am i doing') || lowerPrompt.includes('improve')) {
+  }
+
+  const lower = prompt.toLowerCase();
+  if (lower.includes('schedule') || lower.includes('plan') || lower.includes('timetable')) {
+    return 'schedule';
+  }
+  if (lower.includes('analyze') || lower.includes('review') || lower.includes('improve')) {
     return 'analysis';
   }
   return 'general';
 }
 
-async function getContextForPrompt(promptType) {
-  let context = '';
-  
-  if (promptType === 'schedule' || promptType === 'analysis') {
-    const tasks = await getCurrentTasks();
-    context += `Current tasks: ${JSON.stringify(tasks)}\n`;
-    
-    if (userSchedule.length > 0) {
-      context += `Current schedule: ${JSON.stringify(userSchedule)}\n`;
-    }
+async function callOpenAI(prompt, expectJson = false) {
+  const openAiKey = getApiKey('OPENAI_API_KEY');
+  if (!openAiKey) {
+    throw new Error('OpenAI API key not configured');
   }
-  
-  return context;
-}
 
-async function getCurrentTasks() {
-  const tasks = [];
-  const taskElements = document.querySelectorAll('.task-item');
-  
-  taskElements.forEach(taskElement => {
-    const title = taskElement.querySelector('h3').textContent;
-    const dueDate = taskElement.querySelector('.text-sm')?.textContent || '';
-    const completed = taskElement.querySelector('input[type="checkbox"]').checked;
-    
-    tasks.push({
-      title,
-      dueDate,
-      completed
-    });
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${openAiKey}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: expectJson
+            ? SYSTEM_PROMPTS.schedule
+            : 'You are a time management coach. Keep answers practical and concise.'
+        },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.5,
+      max_tokens: expectJson ? 400 : 220,
+      response_format: expectJson ? { type: 'json_object' } : undefined
+    })
   });
-  
-  return tasks;
-}
 
-function parseAndStoreSchedule(scheduleText) {
-  const timeBlocks = scheduleText.match(/\d{1,2}:\d{2}\s*(?:AM|PM)\s*-\s*\d{1,2}:\d{2}\s*(?:AM|PM)\s*:\s*[^\n]+/g);
-  
-  if (timeBlocks) {
-    userSchedule = timeBlocks.map(block => {
-      const [time, activity] = block.split(':');
-      return {
-        time: time.trim(),
-        activity: activity.trim()
-      };
-    });
-    
-    localStorage.setItem('userSchedule', JSON.stringify(userSchedule));
+  if (response.status === 429) {
+    throw new Error('OpenAI rate limited');
   }
-}
 
-async function addMessage(message, isUser = false) {
-  const chatContainer = document.getElementById('chat-container');
-  if (!chatContainer) return;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI failed (${response.status}): ${errorText}`);
+  }
 
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `flex items-start space-x-3 p-4 ${isUser ? 'justify-end' : 'justify-start'} chat-message`;
-  
-  const avatarDiv = document.createElement('div');
-  avatarDiv.className = 'flex-shrink-0';
-  
-  if (isUser) {
-    const userAvatar = document.getElementById('user-avatar').src || 
-                      'https://img.freepik.com/free-vector/blue-circle-with-white-user_78370-4707.jpg';
-    avatarDiv.innerHTML = `
-      <div class="relative">
-        <img src="${userAvatar}" alt="User" class="w-10 h-10 rounded-full ring-2 ring-blue-500">
-        <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
-      </div>
-    `;
-  } else {
-    avatarDiv.innerHTML = `
-      <div class="relative">
-        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center ring-2 ring-blue-500">
-          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <div class="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-full border-2 border-white dark:border-gray-800"></div>
-      </div>
-    `;
-  }
-  
-  const contentDiv = document.createElement('div');
-  contentDiv.className = `max-w-[70%] rounded-2xl p-4 ${
-    isUser 
-      ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white' 
-      : 'bg-white dark:bg-gray-800'
-  }`;
-  
-  contentDiv.innerHTML = message;
-  messageDiv.appendChild(avatarDiv);
-  messageDiv.appendChild(contentDiv);
-  chatContainer.appendChild(messageDiv);
-  chatContainer.scrollTop = chatContainer.scrollHeight;
-  
-  chatHistory.push({ message, isUser });
-}
+  const data = await response.json();
+  const content = data && data.choices && data.choices[0] && data.choices[0].message
+    ? data.choices[0].message.content
+    : '';
 
-function formatResponse(text) {
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-  const conciseSentences = sentences.slice(0, 3);
-  
-  return `
-    <div class="space-y-3">
-      ${conciseSentences.map((sentence, index) => {
-        const cleanSentence = sentence.trim();
-        if (index === 0) {
-          return `
-            <div class="flex items-center space-x-2">
-              <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div class="font-semibold text-lg text-blue-600 dark:text-blue-400">${cleanSentence}</div>
-            </div>
-          `;
-        } else {
-          return `
-            <div class="flex items-start space-x-3 group">
-              <div class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center flex-shrink-0 mt-0.5 transform group-hover:scale-110 transition-transform">
-                <svg class="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div class="text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">${cleanSentence}</div>
-            </div>
-          `;
-        }
-      }).join('')}
-    </div>
-  `;
-}
+  if (!content || typeof content !== 'string') {
+    throw new Error('OpenAI returned empty response');
+  }
 
-const style = document.createElement('style');
-style.textContent = `
-  .thinking-dots {
-    padding: 8px;
+  if (!expectJson) {
+    return content.trim();
   }
-  
-  .thinking-dots div {
-    animation: bounce 0.8s infinite;
-  }
-  
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
-  }
-  
-  .chat-message {
-    opacity: 0;
-    transform: translateY(10px);
-    animation: messageAppear 0.3s ease-out forwards;
-  }
-  
-  @keyframes messageAppear {
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  
-  .chat-message:hover {
-    transform: translateY(-2px);
-    transition: transform 0.2s ease;
-  }
-`;
-document.head.appendChild(style);
 
-document.getElementById('chat-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const input = document.getElementById('user-input');
-  const message = input.value.trim();
-  
-  if (!message) return;
-  
-  input.disabled = true;
-  input.value = '';
-  
+  let parsed;
   try {
-    addUserMessage(message);
-    
-    if (!isTimeManagementQuery(message)) {
-      await addBotMessage(`
-        <div class="flex items-center space-x-2">
-          <div class="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center">
-            <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <div class="text-gray-700 dark:text-gray-300">
-            I am your time management coach. I can only help with questions about time management, productivity, scheduling, and task organization. Please ask me something related to these topics!
-          </div>
-        </div>
-      `);
-      return;
-    }
-    
-    await addBotMessage('');
-    
-    const response = await generateResponse(message);
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    await addBotMessage(response);
-    
+    parsed = JSON.parse(content);
   } catch (error) {
-    console.error('Error generating response:', error);
-    await addBotMessage('I apologize, but I encountered an error. Please try again.');
-  } finally {
-    input.disabled = false;
-    input.focus();
+    throw new Error('OpenAI JSON parse failed');
   }
-});
 
-document.addEventListener('DOMContentLoaded', () => {
-  initAI();
-  showWelcomeMessage();
-});
+  if (Array.isArray(parsed)) {
+    return JSON.stringify(parsed);
+  }
 
-function isTimeManagementQuery(query) {
-  const timeManagementKeywords = [
-    'time', 'schedule', 'task', 'todo', 'deadline', 'productivity',
-    'focus', 'distraction', 'procrastination', 'organize', 'plan',
-    'routine', 'habit', 'balance', 'priority', 'efficient', 'pomodoro',
-    'break', 'work', 'study', 'meeting', 'calendar', 'reminder',
-    'goal', 'project', 'deadline', 'timeline', 'manage', 'coach',
-    'advice', 'help', 'suggest', 'recommend', 'improve', 'better',
-    'struggle', 'problem', 'issue', 'challenge', 'difficult', 'hard',
-    'exam', 'prepare', 'preparation', 'test', 'review', 'revise',
-    'hours', 'minutes', 'last minute', 'cramming', 'quick',
-    
-    'assignment', 'homework', 'class', 'lecture', 'tutorial', 'quiz',
-    'semester', 'final', 'midterm', 'course', 'subject', 'grade',
-    'syllabus', 'curriculum', 'learn', 'understand', 'remember',
-    'concentrate', 'memorize', 'notes', 'revision', 'practice',
-    
-    'morning', 'afternoon', 'evening', 'night', 'today', 'tomorrow',
-    'weekend', 'week', 'month', 'daily', 'weekly', 'monthly',
-    'due', 'urgent', 'important', 'soon', 'later', 'now',
-    
-    'burnout', 'stress', 'overwhelm', 'tired', 'exhausted', 'rest',
-    'energy', 'motivation', 'concentration', 'discipline', 'method',
-    'technique', 'strategy', 'approach', 'system', 'track', 'monitor',
-    'progress', 'achieve', 'complete', 'finish', 'start', 'begin',
-    
-    'anxious', 'worried', 'nervous', 'calm', 'relax', 'focus',
-    'concentrate', 'mind', 'brain', 'mental', 'physical', 'health',
-    'balance', 'lifestyle', 'habit', 'routine', 'structure',
-    
-    'need', 'want', 'must', 'should', 'could', 'would', 'will',
-    'trying', 'starting', 'finishing', 'doing', 'making', 'planning',
-    'organizing', 'managing', 'scheduling', 'arranging', 'setting',
-    
-    'success', 'achieve', 'accomplish', 'complete', 'master',
-    'excel', 'perform', 'improve', 'enhance', 'optimize', 'maximize',
-    'effective', 'efficient', 'productive', 'successful', 'better'
-  ];
+  if (Array.isArray(parsed.tasks)) {
+    return JSON.stringify(parsed.tasks);
+  }
 
-  const queryWords = query.toLowerCase().split(/\s+/);
-  return queryWords.some(word => timeManagementKeywords.includes(word)) ||
-         timeManagementKeywords.some(keyword => query.toLowerCase().includes(keyword));
+  throw new Error('OpenAI JSON format invalid for schedule');
 }
 
-async function getAIResponse(userInput) {
-  try {
-    // Check if CONFIG is available
-    if (typeof CONFIG === 'undefined') {
-      throw new Error('CONFIG object not found');
-    }
+async function callGemini(prompt, expectJson = false) {
+  const geminiKey = getApiKey('GEMINI_API_KEY');
+  if (!geminiKey) {
+    throw new Error('Gemini API key not configured');
+  }
 
-    if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'your-gemini-api-key-here') {
-      throw new Error('Gemini API key not configured');
-    }
+  const promptType = determinePromptType(prompt, expectJson);
+  const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
-    let response;
-    let retries = 0;
-    const maxRetries = 3;
-    const baseDelay = 2000;
-    
-    while (retries < maxRetries) {
-      try {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `You are a time management coach. Provide concise, actionable advice about time management, productivity, and task organization. Focus on practical tips that can be implemented immediately. Keep responses brief and to the point. User's question: ${userInput}`
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.7,
-              topK: 1,
-              topP: 1,
-              maxOutputTokens: 150
+  for (const modelName of models) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `${SYSTEM_PROMPTS[promptType]}\n\nUser: ${prompt}`
+                }
+              ]
             }
-          })
-        });
-        
-        if (response.status === 429) {
-          const delay = baseDelay * Math.pow(2, retries);
-          console.warn(`Gemini rate limited in getAIResponse (attempt ${retries + 1}/${maxRetries}), waiting ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          retries++;
-          continue;
-        }
-        
-        break; // Success or non-retryable error
-        
-      } catch (fetchError) {
-        if (retries < maxRetries - 1) {
-          const delay = baseDelay * Math.pow(2, retries);
-          console.warn(`Gemini fetch failed in getAIResponse (attempt ${retries + 1}/${maxRetries}), retrying in ${delay}ms:`, fetchError);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          retries++;
-        } else {
-          throw fetchError;
-        }
+          ],
+          generationConfig: {
+            temperature: 0.6,
+            maxOutputTokens: expectJson ? 400 : 220,
+            responseMimeType: expectJson ? 'application/json' : 'text/plain'
+          }
+        })
       }
+    );
+
+    if (response.status === 404) {
+      continue;
     }
-    
-    if (!response || !response.ok) {
-      if (response && response.status === 429) {
-        throw new Error('Gemini API rate limit exceeded. Please wait a minute and try again.');
-      }
-      if (response && response.status === 404) {
-        throw new Error('Gemini model not found or API key invalid');
-      }
-      throw new Error(`HTTP error! status: ${response ? response.status : 'unknown'}`);
+
+    if (response.status === 429) {
+      throw new Error('Gemini rate limited');
     }
-    
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini failed (${response.status}): ${errorText}`);
+    }
+
     const data = await response.json();
-    
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
-      throw new Error('Invalid response format from Gemini API');
+    const text = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+      ? data.candidates[0].content.parts[0].text
+      : '';
+
+    if (!text || typeof text !== 'string') {
+      throw new Error('Gemini returned empty response');
     }
-    
-    return data.candidates[0].content.parts[0].text;
-  } catch (error) {
-    console.error('Error getting AI response:', error);
-    throw error;
+
+    return expectJson ? normalizeJsonArray(text) : text.trim();
   }
+
+  throw new Error('No Gemini model available');
 }
 
-async function handleUserInput(userInput) {
-  if (!isTimeManagementQuery(userInput)) {
-    addMessageToChat('assistant', `
-      <div class="flex items-center space-x-2">
-        <span>💡 I am a time management coach. I cannot answer that question.</span>
-      </div>
-    `);
-    return;
-  }
-  
-  const loadingId = addLoadingIndicator();
-  
+function normalizeJsonArray(text) {
+  const trimmed = text.trim();
+
   try {
-    const response = await Promise.race([
-      getAIResponse(userInput),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Response timeout')), 3000)
-      )
-    ]);
-    
-    removeLoadingIndicator(loadingId);
-    
-    addMessageToChat('assistant', response);
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return JSON.stringify(parsed);
+    }
+    if (Array.isArray(parsed.tasks)) {
+      return JSON.stringify(parsed.tasks);
+    }
   } catch (error) {
-    removeLoadingIndicator(loadingId);
-    
-    addMessageToChat('error', '⚠️ Sorry, I encountered an error. Please try again.');
-    console.error('Error getting AI response:', error);
+    // Continue to regex fallback
   }
-}
 
-function addMessageToChat(role, content) {
-  const chatContainer = document.getElementById('chat-container');
-  if (!chatContainer) return;
-
-  const messageDiv = document.createElement('div');
-  messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-3`;
-  
-  const messageContent = document.createElement('div');
-  messageContent.className = `max-w-[80%] rounded-lg p-3 ${
-    role === 'user' 
-      ? 'bg-blue-600 text-white' 
-      : role === 'error'
-      ? 'bg-red-100 text-red-700'
-      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-  }`;
-  
-  const icon = role === 'user' 
-    ? '👤 '
-    : role === 'error'
-    ? '⚠️ '
-    : '💡 ';
-  
-  messageContent.innerHTML = `${icon}${content}`;
-  messageDiv.appendChild(messageContent);
-  chatContainer.appendChild(messageDiv);
-  
-  chatContainer.scrollTop = chatContainer.scrollHeight;
-}
-
-function addLoadingIndicator() {
-  const chatContainer = document.getElementById('chat-container');
-  if (!chatContainer) return null;
-
-  const loadingDiv = document.createElement('div');
-  loadingDiv.className = 'flex justify-start mb-3';
-  loadingDiv.id = 'loading-indicator';
-  
-  const loadingContent = document.createElement('div');
-  loadingContent.className = 'bg-gray-100 dark:bg-gray-700 rounded-lg p-3';
-  loadingContent.innerHTML = '⏳ Thinking...';
-  
-  loadingDiv.appendChild(loadingContent);
-  chatContainer.appendChild(loadingDiv);
-  chatContainer.scrollTop = chatContainer.scrollHeight;
-  
-  return 'loading-indicator';
-}
-
-function removeLoadingIndicator(id) {
-  const loadingDiv = document.getElementById(id);
-  if (loadingDiv) {
-    loadingDiv.remove();
+  const fenced = trimmed.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (fenced && fenced[1]) {
+    return normalizeJsonArray(fenced[1]);
   }
+
+  const arrayMatch = trimmed.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    return arrayMatch[0];
+  }
+
+  throw new Error('Could not normalize JSON array');
 }
 
-window.showWelcomeMessage = function() {
-  const chatContainer = document.getElementById('chat-container');
-  if (!chatContainer) return;
-  chatContainer.innerHTML = '';
-  let profile = null;
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatCoachResponse(text) {
+  const cleaned = escapeHtml(text).replace(/\n/g, '<br>');
+  return `<div class="space-y-2"><p>${cleaned}</p></div>`;
+}
+
+async function generateAIResponse(prompt, expectJson = false) {
+  if (isProcessing) {
+    throw new Error('Please wait for the previous response to finish');
+  }
+
+  isProcessing = true;
   try {
-    const stored = localStorage.getItem('timeGuardUserProfile');
-    if (stored) profile = JSON.parse(stored);
-  } catch (e) {}
-  if (profile && profile.name && profile.email) {
-    const name = profile.name ? profile.name : 'there';
-    addBotMessage(`Hi, <b>${name}</b> 👋, I am your time management coach. How may I help you?`);
-  } else {
-    addBotMessage('Hi, I am your time management coach. How may I help you?');
+    try {
+      return await callOpenAI(prompt, expectJson);
+    } catch (openAiError) {
+      console.warn('OpenAI failed, trying Gemini:', openAiError);
+      return await callGemini(prompt, expectJson);
+    }
+  } catch (apiError) {
+    console.error('All AI providers failed, using mock response:', apiError);
+    return getMockResponse(prompt, expectJson);
+  } finally {
+    isProcessing = false;
   }
-};
-
-async function initAIChat() {
-    try {
-    } catch (error) {
-    }
 }
 
-async function handleUserMessage(message) {
-    try {
-        addMessageToChat('user', message);
-        
-        const response = await generateAIResponse(message);
-        addMessageToChat('assistant', response);
-    } catch (error) {
-        addMessageToChat('error', 'Sorry, I encountered an error. Please try again.');
-    }
+async function getCoachResponse(message) {
+  const responseText = await generateAIResponse(message, false);
+  return formatCoachResponse(responseText);
 }
 
-async function generateAIResponse(message) {
-    try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return 'I understand you want help with time management. Here are some tips...';
-    } catch (error) {
-        return 'I\'m sorry, I couldn\'t process your request. Please try again.';
-    }
+async function initAI() {
+  console.log('AI module initialized');
 }
+
+window.generateAIResponse = generateAIResponse;
+window.getCoachResponse = getCoachResponse;
+window.initAI = initAI;
