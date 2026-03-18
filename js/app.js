@@ -1,7 +1,8 @@
-
 document.addEventListener('DOMContentLoaded', () => {
   initApp();
 });
+
+const AUTO_TASK_PREF_KEY = 'tmCoachAutoAddTasks';
 
 async function initApp() {
   try {
@@ -13,6 +14,7 @@ async function initApp() {
     }
 
     setupEventListeners();
+    initAutoTaskToggle();
 
     if (typeof initAI === 'function') {
       await initAI();
@@ -24,40 +26,6 @@ async function initApp() {
 }
 
 function setupEventListeners() {
-  const syncTasksBtn = document.getElementById('sync-tasks-btn');
-  if (syncTasksBtn) {
-    syncTasksBtn.addEventListener('click', async () => {
-      try {
-        await fetchGoogleTasks();
-        showNotification('Tasks synced successfully!', 'success');
-      } catch (error) {
-        console.error('Error syncing tasks:', error);
-        showNotification('Failed to sync tasks. Please try again.', 'error');
-      }
-    });
-  }
-
-  const addTaskForm = document.getElementById('add-task-form');
-  if (addTaskForm) {
-    addTaskForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const taskInput = document.getElementById('new-task-input');
-      if (!taskInput) return;
-
-      const taskTitle = taskInput.value.trim();
-      if (!taskTitle) return;
-
-      try {
-        await addGoogleTask(taskTitle);
-        taskInput.value = '';
-        showNotification('Task added successfully!', 'success');
-      } catch (error) {
-        console.error('Error adding task:', error);
-        showNotification('Failed to add task. Please try again.', 'error');
-      }
-    });
-  }
-
   const chatForm = document.getElementById('chat-form');
   if (chatForm) {
     chatForm.addEventListener('submit', async (e) => {
@@ -75,9 +43,17 @@ function setupEventListeners() {
         const loadingId = addLoadingIndicator();
 
         try {
-          const response = await getCoachResponse(message);
+          const coachResult = typeof getCoachResult === 'function'
+            ? await getCoachResult(message)
+            : { text: await generateAIResponse(message, false), html: await getCoachResponse(message) };
+
           removeLoadingIndicator(loadingId);
-          addBotMessage(response);
+          addBotMessage(coachResult.html);
+
+          const addedCount = await maybeAutoAddPlanTasks(message, coachResult.text);
+          if (addedCount > 0) {
+            showNotification(`${addedCount} plan tasks added to your task list`, 'success');
+          }
         } catch (error) {
           removeLoadingIndicator(loadingId);
           console.error('Chat request failed:', error);
@@ -99,15 +75,16 @@ function setupEventListeners() {
       const date = dateInput ? dateInput.value : '';
       const focus = focusInput ? focusInput.value : 'time management';
 
-      if (date) {
-        try {
-          await generateSchedule(date, focus);
-        } catch (error) {
-          console.error('Error generating schedule:', error);
-          showNotification('Failed to generate schedule. Please try again.', 'error');
-        }
-      } else {
+      if (!date) {
         showNotification('Please select a date', 'error');
+        return;
+      }
+
+      try {
+        await generateSchedule(date, focus);
+      } catch (error) {
+        console.error('Error generating schedule:', error);
+        showNotification('Failed to generate schedule. Please try again.', 'error');
       }
     });
   }
@@ -133,6 +110,27 @@ function setupEventListeners() {
       }
     });
   }
+}
+
+function isAutoTaskSyncEnabled() {
+  const storedValue = localStorage.getItem(AUTO_TASK_PREF_KEY);
+  if (storedValue === null) {
+    return true;
+  }
+  return storedValue === '1';
+}
+
+function initAutoTaskToggle() {
+  const toggle = document.getElementById('auto-task-toggle');
+  if (!toggle) return;
+
+  toggle.checked = isAutoTaskSyncEnabled();
+
+  toggle.addEventListener('change', () => {
+    const enabled = toggle.checked;
+    localStorage.setItem(AUTO_TASK_PREF_KEY, enabled ? '1' : '0');
+    showNotification(enabled ? 'Auto-add tasks enabled' : 'Auto-add tasks disabled', 'success');
+  });
 }
 
 async function generateSchedule(date, focus) {
@@ -206,9 +204,93 @@ async function generateSchedule(date, focus) {
 
 function escapeHtml(unsafe) {
   return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function shouldAutoCreateTasksFromPrompt(prompt) {
+  const lower = prompt.toLowerCase();
+  return lower.includes('plan') ||
+    lower.includes('schedule') ||
+    lower.includes('roadmap') ||
+    /\b\d+\s*days?\b/.test(lower) ||
+    lower.includes('dsa');
+}
+
+function getExistingTaskTitles() {
+  const titleNodes = document.querySelectorAll('#tasks-container .task-item h3');
+  return new Set(Array.from(titleNodes).map(node => node.textContent.trim().toLowerCase()));
+}
+
+function buildDueDateForDayOffset(dayOffset) {
+  const date = new Date();
+  date.setDate(date.getDate() + Math.max(0, dayOffset));
+  date.setHours(9, 0, 0, 0);
+  return date.toISOString().slice(0, 16);
+}
+
+function extractTaskCandidatesFromPlan(planText) {
+  const lines = String(planText).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const extracted = [];
+
+  for (const line of lines) {
+    const dayMatch = line.match(/^Day\s*(\d+)\s*:\s*(.+)$/i);
+    if (dayMatch) {
+      extracted.push({
+        title: `Day ${dayMatch[1]}: ${dayMatch[2]}`,
+        notes: 'Generated from AI coaching plan',
+        dayOffset: parseInt(dayMatch[1], 10) - 1
+      });
+      continue;
+    }
+
+    if (line.startsWith('- Block')) {
+      extracted.push({
+        title: line.replace(/^-\s*/, ''),
+        notes: 'Suggested execution block from AI plan',
+        dayOffset: 0
+      });
+    }
+  }
+
+  return extracted.slice(0, 8);
+}
+
+async function maybeAutoAddPlanTasks(userPrompt, responseText) {
+  if (typeof addTask !== 'function') {
+    return 0;
+  }
+
+  if (!isAutoTaskSyncEnabled()) {
+    return 0;
+  }
+
+  if (!shouldAutoCreateTasksFromPrompt(userPrompt)) {
+    return 0;
+  }
+
+  const candidates = extractTaskCandidatesFromPlan(responseText);
+  if (candidates.length === 0) {
+    return 0;
+  }
+
+  const existingTitles = getExistingTaskTitles();
+  let added = 0;
+
+  for (const candidate of candidates) {
+    const normalized = candidate.title.toLowerCase();
+    if (existingTitles.has(normalized)) {
+      continue;
+    }
+
+    const due = buildDueDateForDayOffset(candidate.dayOffset);
+    await addTask(candidate.title, candidate.notes, due);
+    existingTitles.add(normalized);
+    added += 1;
+  }
+
+  return added;
 }

@@ -88,6 +88,16 @@ The app handles AI providers in this order:
 
 This means chat remains usable even if one provider fails or rate-limits.
 
+### Intelligent Task Updates
+
+When you ask for plan-style guidance (for example 5-day or 7-day plans), the app now:
+
+- Returns a structured coaching response with sections
+- Extracts actionable plan items from the response
+- Adds those items into your task list automatically (with duplicate checks)
+
+This works for both local task mode and Google Tasks mode.
+
 ## Common Issues
 
 ### Chatbot not responding

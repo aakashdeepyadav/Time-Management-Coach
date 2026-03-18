@@ -9,6 +9,16 @@ let syncTimeout = null;
 let tasks = [];
 let isGoogleUser = false;
 
+function getRuntimeConfig() {
+  if (typeof window !== 'undefined' && window.CONFIG) {
+    return window.CONFIG;
+  }
+  if (typeof CONFIG !== 'undefined') {
+    return CONFIG;
+  }
+  return {};
+}
+
 
 function checkIsGoogleUser() {
   const profile = localStorage.getItem('timeGuardUserProfile');
@@ -24,6 +34,7 @@ function checkIsGoogleUser() {
 
 
 async function ensureGapiClient() {
+  const config = getRuntimeConfig();
   return new Promise((resolve, reject) => {
     if (gapi.client && gapi.client.tasks) {
       if (typeof accessToken === 'string') {
@@ -34,7 +45,7 @@ async function ensureGapiClient() {
       gapi.load('client', async () => {
         try {
           await gapi.client.init({
-            apiKey: CONFIG.GOOGLE_API_KEY,
+            apiKey: config.GOOGLE_API_KEY,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest']
           });
           if (typeof accessToken === 'string') {
@@ -54,12 +65,14 @@ async function ensureGapiClient() {
 
 async function getOrCreateDefaultTaskList() {
   await ensureGapiClient();
+  const config = getRuntimeConfig();
+  const taskListName = config.DEFAULT_TASKS_LIST_NAME || 'TM Coach Tasks';
   try {
     const response = await gapi.client.tasks.tasklists.list();
     let taskLists = response.result.items || [];
-    defaultTaskList = taskLists.find(list => list.title === CONFIG.DEFAULT_TASKS_LIST_NAME);
+    defaultTaskList = taskLists.find(list => list.title === taskListName);
     if (!defaultTaskList) {
-      const createResp = await gapi.client.tasks.tasklists.insert({ title: CONFIG.DEFAULT_TASKS_LIST_NAME });
+      const createResp = await gapi.client.tasks.tasklists.insert({ title: taskListName });
       defaultTaskList = createResp.result;
     }
     return defaultTaskList;
@@ -469,3 +482,38 @@ function clearTasks() {
   document.getElementById('tasks-container').innerHTML = 
     '<div class="text-gray-500 text-center">No tasks found. Click Sync Tasks to fetch from Google Tasks.</div>';
 }
+
+async function fetchGoogleTasks() {
+  await loadGoogleTasks();
+  return tasks;
+}
+
+async function addGoogleTask(title, notes = '', due = '') {
+  await addTask(title, notes, due);
+  return true;
+}
+
+async function addScheduleTasks(scheduleTasks) {
+  if (!Array.isArray(scheduleTasks) || scheduleTasks.length === 0) {
+    return false;
+  }
+
+  for (let index = 0; index < scheduleTasks.length; index += 1) {
+    const item = scheduleTasks[index] || {};
+    const title = item.title ? String(item.title).trim() : '';
+    const time = item.time ? String(item.time).trim() : '';
+    const notes = item.notes ? String(item.notes).trim() : 'Added from generated schedule';
+
+    if (!title) {
+      continue;
+    }
+
+    await addTask(time ? `${time} - ${title}` : title, notes, '');
+  }
+
+  return true;
+}
+
+window.fetchGoogleTasks = fetchGoogleTasks;
+window.addGoogleTask = addGoogleTask;
+window.addScheduleTasks = addScheduleTasks;

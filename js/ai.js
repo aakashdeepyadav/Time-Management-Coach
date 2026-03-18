@@ -5,10 +5,41 @@ let fallbackContext = {
 };
 
 const SYSTEM_PROMPTS = {
-  general: 'You are a time management coach. Give concise, practical advice in 3-4 sentences max.',
+  general: 'You are a time management coach. Give detailed, practical, and well-structured plans. Use clear sections, short bullet points, and concrete action steps with timelines.',
   schedule: 'You are a time management coach. Return only a JSON array of tasks with fields: time, title, notes.',
   analysis: 'You are a time management coach. Analyze the user context and suggest practical improvements.'
 };
+
+function buildStructuredCoachInstruction(prompt) {
+  const lower = prompt.toLowerCase();
+  const requestedDays = extractRequestedDays(lower);
+  const hasPlanIntent = isPlanIntent(lower);
+  const topic = detectTopic(lower) || 'time management';
+
+  if (hasPlanIntent || requestedDays) {
+    const days = requestedDays || 7;
+    return [
+      `Create a complete ${days}-day plan for ${topic}.`,
+      'Response format requirements:',
+      '1) Goal Summary (2-3 lines)',
+      `2) Day-by-Day Plan (Day 1 to Day ${days}, each day with 3 study/work blocks and clear outcomes)`,
+      '3) Daily Time Template (morning, afternoon, evening)',
+      '4) Progress Tracking Metrics (what to measure daily)',
+      '5) Risk Management (what to do if behind schedule)',
+      'Use practical and realistic workloads. Avoid vague statements.'
+    ].join('\n');
+  }
+
+  return [
+    'Provide a structured coaching answer in these sections:',
+    '1) Situation Assessment',
+    '2) Step-by-Step Action Plan',
+    '3) Suggested Daily Routine',
+    '4) How to Measure Progress',
+    '5) Next 24 Hours Action Items',
+    'Keep it practical, specific, and immediately actionable.'
+  ].join('\n');
+}
 
 function getConfig() {
   if (typeof window !== 'undefined' && window.CONFIG) {
@@ -161,16 +192,22 @@ function createDayWisePlan(topic, days) {
       ? dsaTopics[(day - 1) % dsaTopics.length]
       : `${topic} - priority module ${day}`;
 
-    let line = `Day ${day}: ${topicName} -> 2h concept learning, 2h problem solving, 1h revision and error log.`;
+    let line = `Day ${day}: ${topicName}\n- Block 1 (2h): Concept learning and notes\n- Block 2 (2h): Guided practice and problem solving\n- Block 3 (1h): Revision, mistakes log, and recap`;
 
     if (day === days) {
-      line = `Day ${day}: Full revision + timed mock practice -> 2h mixed problems, 2h weak-area fixes, 1h formula/pattern recap.`;
+      line = `Day ${day}: Full revision + timed mock practice\n- Block 1 (2h): Mixed timed problems\n- Block 2 (2h): Weak-area fixes\n- Block 3 (1h): Formula/pattern recap and planning`;
     }
 
     planLines.push(line);
   }
 
-  return `Here is your ${days}-day ${topic} plan:\n${planLines.join('\n')}\n\nDaily rule: use 50/10 focus cycles, track solved problems, and review mistakes every night.`;
+  return [
+    `Goal Summary:\nComplete a focused ${days}-day ${topic} plan with measurable daily outcomes.`,
+    `\nDay-by-Day Plan:\n${planLines.join('\n\n')}`,
+    '\nDaily Time Template:\n- Morning: Deep work on hardest topic\n- Afternoon: Practice and application\n- Evening: Review, recap, and next-day planning',
+    '\nProgress Tracking:\n- Number of focused hours\n- Number of tasks/problems completed\n- Mistake categories reduced day by day',
+    '\nIf You Fall Behind:\n- Cut low-priority tasks first\n- Keep revision block mandatory\n- Shift unfinished high-priority tasks to next morning'
+  ].join('\n');
 }
 
 function determinePromptType(prompt, expectJson = false) {
@@ -207,12 +244,17 @@ async function callOpenAI(prompt, expectJson = false) {
           role: 'system',
           content: expectJson
             ? SYSTEM_PROMPTS.schedule
-            : 'You are a time management coach. Keep answers practical and concise.'
+            : SYSTEM_PROMPTS.general
         },
-        { role: 'user', content: prompt }
+        {
+          role: 'user',
+          content: expectJson
+            ? prompt
+            : `${buildStructuredCoachInstruction(prompt)}\n\nUser Request:\n${prompt}`
+        }
       ],
-      temperature: 0.5,
-      max_tokens: expectJson ? 400 : 220,
+      temperature: 0.4,
+      max_tokens: expectJson ? 500 : 700,
       response_format: expectJson ? { type: 'json_object' } : undefined
     })
   });
@@ -279,14 +321,16 @@ async function callGemini(prompt, expectJson = false) {
             {
               parts: [
                 {
-                  text: `${SYSTEM_PROMPTS[promptType]}\n\nUser: ${prompt}`
+                  text: expectJson
+                    ? `${SYSTEM_PROMPTS[promptType]}\n\nUser: ${prompt}`
+                    : `${SYSTEM_PROMPTS[promptType]}\n\n${buildStructuredCoachInstruction(prompt)}\n\nUser: ${prompt}`
                 }
               ]
             }
           ],
           generationConfig: {
-            temperature: 0.6,
-            maxOutputTokens: expectJson ? 400 : 220,
+            temperature: 0.45,
+            maxOutputTokens: expectJson ? 500 : 900,
             responseMimeType: expectJson ? 'application/json' : 'text/plain'
           }
         })
@@ -359,8 +403,48 @@ function escapeHtml(text) {
 }
 
 function formatCoachResponse(text) {
-  const cleaned = escapeHtml(text).replace(/\n/g, '<br>');
-  return `<div class="space-y-2"><p>${cleaned}</p></div>`;
+  const lines = String(text)
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length === 0) {
+    return '<div class="space-y-2"><p>No response generated.</p></div>';
+  }
+
+  let html = '<div class="space-y-3">';
+  let inList = false;
+
+  for (const line of lines) {
+    const safeLine = escapeHtml(line);
+
+    if (/^[-*]\s+/.test(line)) {
+      if (!inList) {
+        html += '<ul class="list-disc pl-5 space-y-1">';
+        inList = true;
+      }
+      html += `<li>${escapeHtml(line.replace(/^[-*]\s+/, ''))}</li>`;
+      continue;
+    }
+
+    if (inList) {
+      html += '</ul>';
+      inList = false;
+    }
+
+    if (/^[A-Za-z0-9 ]+:$/.test(line)) {
+      html += `<h4 class="font-semibold text-surface-900 dark:text-surface-100">${safeLine}</h4>`;
+    } else {
+      html += `<p>${safeLine}</p>`;
+    }
+  }
+
+  if (inList) {
+    html += '</ul>';
+  }
+
+  html += '</div>';
+  return html;
 }
 
 async function generateAIResponse(prompt, expectJson = false) {
@@ -389,10 +473,19 @@ async function getCoachResponse(message) {
   return formatCoachResponse(responseText);
 }
 
+async function getCoachResult(message) {
+  const responseText = await generateAIResponse(message, false);
+  return {
+    text: responseText,
+    html: formatCoachResponse(responseText)
+  };
+}
+
 async function initAI() {
   console.log('AI module initialized');
 }
 
 window.generateAIResponse = generateAIResponse;
 window.getCoachResponse = getCoachResponse;
+window.getCoachResult = getCoachResult;
 window.initAI = initAI;
