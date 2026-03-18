@@ -3,6 +3,10 @@ let fallbackContext = {
   topic: null,
   days: null
 };
+let conversationMemory = [];
+
+const MAX_CONTEXT_MESSAGES = 8;
+const MEMORY_STORAGE_KEY = 'tmCoachConversationMemory';
 
 const SYSTEM_PROMPTS = {
   general: 'You are a time management coach. Give detailed, practical, and well-structured plans. Use clear sections, short bullet points, and concrete action steps with timelines.',
@@ -51,6 +55,107 @@ function getConfig() {
   }
 
   return {};
+}
+
+function normalizeMemoryText(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function pushConversationMessage(role, content) {
+  const normalizedContent = normalizeMemoryText(content);
+  if (!normalizedContent) {
+    return;
+  }
+
+  conversationMemory.push({ role, content: normalizedContent });
+
+  if (conversationMemory.length > MAX_CONTEXT_MESSAGES) {
+    conversationMemory = conversationMemory.slice(-MAX_CONTEXT_MESSAGES);
+  }
+
+  try {
+    localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(conversationMemory));
+  } catch (error) {
+    console.warn('Unable to persist conversation memory:', error);
+  }
+}
+
+function loadConversationMemory() {
+  try {
+    const raw = localStorage.getItem(MEMORY_STORAGE_KEY);
+    if (!raw) {
+      conversationMemory = [];
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      conversationMemory = [];
+      return;
+    }
+
+    conversationMemory = parsed
+      .filter(item => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string')
+      .slice(-MAX_CONTEXT_MESSAGES)
+      .map(item => ({ role: item.role, content: normalizeMemoryText(item.content) }))
+      .filter(item => item.content.length > 0);
+  } catch (error) {
+    conversationMemory = [];
+  }
+}
+
+function clearConversationMemory() {
+  conversationMemory = [];
+  fallbackContext = {
+    topic: null,
+    days: null
+  };
+
+  try {
+    localStorage.removeItem(MEMORY_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Unable to clear conversation memory:', error);
+  }
+}
+
+function getRecentConversationMessages() {
+  return conversationMemory.slice(-MAX_CONTEXT_MESSAGES);
+}
+
+function buildOpenAiMessages(prompt, expectJson = false) {
+  const systemMessage = {
+    role: 'system',
+    content: expectJson
+      ? SYSTEM_PROMPTS.schedule
+      : `${SYSTEM_PROMPTS.general}\nMaintain conversation continuity using previous user goals and constraints.`
+  };
+
+  const recent = getRecentConversationMessages();
+  const currentUserMessage = {
+    role: 'user',
+    content: expectJson
+      ? prompt
+      : `${buildStructuredCoachInstruction(prompt)}\n\nUser Request:\n${prompt}`
+  };
+
+  return [systemMessage, ...recent, currentUserMessage];
+}
+
+function buildGeminiPromptWithContext(prompt, expectJson = false, promptType = 'general') {
+  const recent = getRecentConversationMessages();
+  const contextBlock = recent.length
+    ? `Conversation context:\n${recent
+      .map(item => `${item.role === 'assistant' ? 'Coach' : 'User'}: ${item.content}`)
+      .join('\n')}`
+    : 'Conversation context: (no previous context)';
+
+  if (expectJson) {
+    return `${SYSTEM_PROMPTS[promptType]}\n\n${contextBlock}\n\nUser: ${prompt}`;
+  }
+
+  return `${SYSTEM_PROMPTS[promptType]}\nMaintain continuity with previous context and avoid repeating the same generic advice.\n\n${contextBlock}\n\n${buildStructuredCoachInstruction(prompt)}\n\nUser: ${prompt}`;
 }
 
 function getApiKey(keyName) {
@@ -239,20 +344,7 @@ async function callOpenAI(prompt, expectJson = false) {
     },
     body: JSON.stringify({
       model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: expectJson
-            ? SYSTEM_PROMPTS.schedule
-            : SYSTEM_PROMPTS.general
-        },
-        {
-          role: 'user',
-          content: expectJson
-            ? prompt
-            : `${buildStructuredCoachInstruction(prompt)}\n\nUser Request:\n${prompt}`
-        }
-      ],
+      messages: buildOpenAiMessages(prompt, expectJson),
       temperature: 0.4,
       max_tokens: expectJson ? 500 : 700,
       response_format: expectJson ? { type: 'json_object' } : undefined
@@ -321,9 +413,7 @@ async function callGemini(prompt, expectJson = false) {
             {
               parts: [
                 {
-                  text: expectJson
-                    ? `${SYSTEM_PROMPTS[promptType]}\n\nUser: ${prompt}`
-                    : `${SYSTEM_PROMPTS[promptType]}\n\n${buildStructuredCoachInstruction(prompt)}\n\nUser: ${prompt}`
+                  text: buildGeminiPromptWithContext(prompt, expectJson, promptType)
                 }
               ]
             }
@@ -454,15 +544,31 @@ async function generateAIResponse(prompt, expectJson = false) {
 
   isProcessing = true;
   try {
+    if (!expectJson) {
+      pushConversationMessage('user', prompt);
+    }
+
+    let responseText = '';
+
     try {
-      return await callOpenAI(prompt, expectJson);
+      responseText = await callOpenAI(prompt, expectJson);
     } catch (openAiError) {
       console.warn('OpenAI failed, trying Gemini:', openAiError);
-      return await callGemini(prompt, expectJson);
+      responseText = await callGemini(prompt, expectJson);
     }
+
+    if (!expectJson) {
+      pushConversationMessage('assistant', responseText);
+    }
+
+    return responseText;
   } catch (apiError) {
     console.error('All AI providers failed, using mock response:', apiError);
-    return getMockResponse(prompt, expectJson);
+    const fallbackText = getMockResponse(prompt, expectJson);
+    if (!expectJson) {
+      pushConversationMessage('assistant', fallbackText);
+    }
+    return fallbackText;
   } finally {
     isProcessing = false;
   }
@@ -482,10 +588,12 @@ async function getCoachResult(message) {
 }
 
 async function initAI() {
+  loadConversationMemory();
   console.log('AI module initialized');
 }
 
 window.generateAIResponse = generateAIResponse;
 window.getCoachResponse = getCoachResponse;
 window.getCoachResult = getCoachResult;
+window.clearCoachMemory = clearConversationMemory;
 window.initAI = initAI;

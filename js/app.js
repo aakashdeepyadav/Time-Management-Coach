@@ -15,6 +15,7 @@ async function initApp() {
 
     setupEventListeners();
     initAutoTaskToggle();
+    initCoachMemoryReset();
 
     if (typeof initAI === 'function') {
       await initAI();
@@ -130,6 +131,20 @@ function initAutoTaskToggle() {
     const enabled = toggle.checked;
     localStorage.setItem(AUTO_TASK_PREF_KEY, enabled ? '1' : '0');
     showNotification(enabled ? 'Auto-add tasks enabled' : 'Auto-add tasks disabled', 'success');
+  });
+}
+
+function initCoachMemoryReset() {
+  const resetButton = document.getElementById('reset-coach-memory');
+  if (!resetButton) return;
+
+  resetButton.addEventListener('click', () => {
+    if (typeof clearCoachMemory === 'function') {
+      clearCoachMemory();
+      showNotification('Coach memory reset successfully', 'success');
+    } else {
+      showNotification('Memory reset is not available right now', 'error');
+    }
   });
 }
 

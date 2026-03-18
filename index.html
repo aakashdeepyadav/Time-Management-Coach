@@ -67,7 +67,7 @@
 </head>
 <body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors">
 
-  <button id="theme-toggle" class="fixed top-4 right-4 p-2 rounded-full bg-gray-200 dark:bg-gray-700">
+  <button id="theme-toggle" class="theme-toggle fixed top-4 right-4 p-2 rounded-full bg-gray-200 dark:bg-gray-700" aria-label="Toggle theme">
     <svg id="sun-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
     </svg>
@@ -77,12 +77,12 @@
   </button>
 
   <div id="login-screen" class="min-h-screen flex items-center justify-center bg-surface-50 dark:bg-surface-950 p-4">
-    <div class="card p-10 max-w-md w-full relative overflow-hidden">
+    <div class="card login-card p-10 max-w-md w-full relative overflow-hidden">
       <div class="absolute top-0 left-0 right-0 h-1 bg-brand-500"></div>
       
       <div class="relative z-10">
         <div class="flex justify-center mb-6">
-          <div class="w-16 h-16 bg-brand-500 rounded-2xl flex items-center justify-center shadow-sm">
+          <div class="brand-mark w-16 h-16 bg-brand-500 rounded-2xl flex items-center justify-center shadow-sm">
             <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -103,7 +103,7 @@
   </div>
 
   <div id="main-app" class="hidden min-h-screen bg-surface-50 dark:bg-surface-950 flex flex-col">
-    <nav class="bg-white/80 dark:bg-surface-900/80 backdrop-blur-md sticky top-0 z-50 border-b border-surface-100 dark:border-surface-800">
+    <nav class="app-nav sticky top-0 z-50 border-b border-surface-100 dark:border-surface-800">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
           <div class="flex items-center space-x-3">
@@ -130,14 +130,14 @@
         <!-- Sidebar -->
         <div class="lg:col-span-4 space-y-10">
           <!-- Pomodoro -->
-          <section class="card p-8">
+          <section class="card module-card p-8">
             <div class="flex items-center space-x-3 mb-6">
-              <div class="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg text-orange-500">
+              <div class="section-icon p-2 rounded-lg">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h2 class="text-lg font-bold text-surface-900 dark:text-surface-50">Pomodoro Timer</h2>
+              <h2 class="section-title text-lg font-bold text-surface-900 dark:text-surface-50">Pomodoro Timer</h2>
             </div>
             
             <div class="text-center">
@@ -162,15 +162,15 @@
           </section>
 
           <!-- Tasks -->
-          <section class="card p-8">
+          <section class="card module-card p-8">
             <div class="flex justify-between items-center mb-6">
               <div class="flex items-center space-x-3">
-                <div class="p-2 bg-brand-50 dark:bg-brand-500/10 rounded-lg text-brand-500">
+                <div class="section-icon p-2 rounded-lg">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                   </svg>
                 </div>
-                <h2 class="text-lg font-bold text-surface-900 dark:text-surface-50">My Tasks</h2>
+                <h2 class="section-title text-lg font-bold text-surface-900 dark:text-surface-50">My Tasks</h2>
               </div>
               <button id="sync-tasks-btn" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline">Sync with Google</button>
             </div>
@@ -193,10 +193,10 @@
 
         <!-- Chat Coach -->
         <div class="lg:col-span-8">
-          <section class="card h-full flex flex-col p-8 min-h-[600px]">
-            <div class="flex items-center justify-between mb-6 gap-4 flex-wrap">
+          <section class="card module-card h-full flex flex-col p-8 min-h-[600px]">
+            <div class="coach-header flex items-center justify-between mb-6 gap-4 flex-wrap">
               <div class="flex items-center space-x-3">
-              <div class="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg text-indigo-500">
+              <div class="section-icon p-2 rounded-lg">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                 </svg>
@@ -206,11 +206,14 @@
                 <p class="text-xs text-surface-500 font-medium">Personal productivity strategist</p>
               </div>
             </div>
-              <label class="coach-toggle" for="auto-task-toggle">
-                <span class="coach-toggle__text">Auto-add tasks</span>
-                <input id="auto-task-toggle" type="checkbox" checked>
-                <span class="coach-toggle__slider" aria-hidden="true"></span>
-              </label>
+              <div class="flex items-center gap-2">
+                <label class="coach-toggle" for="auto-task-toggle">
+                  <span class="coach-toggle__text">Auto-add tasks</span>
+                  <input id="auto-task-toggle" type="checkbox" checked>
+                  <span class="coach-toggle__slider" aria-hidden="true"></span>
+                </label>
+                <button id="reset-coach-memory" type="button" class="btn btn-secondary text-xs px-3 py-2">Reset Memory</button>
+              </div>
             </div>
             
             <div id="chat-container" class="flex-grow overflow-y-auto mb-8 space-y-6 pr-4 chat-container"></div>
@@ -218,7 +221,7 @@
             <form id="chat-form" class="relative">
               <input type="text" id="user-input" placeholder="Ask your coach anything..." 
                      class="form-input w-full pr-14 py-4 text-base shadow-sm">
-              <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-all shadow-md shadow-brand-500/20">
+              <button type="submit" class="send-btn absolute right-2 top-1/2 -translate-y-1/2 p-2.5 text-white rounded-lg transition-all" aria-label="Send message">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
